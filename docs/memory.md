@@ -14,12 +14,10 @@ explicit request — they wanted it named "memory.md". At the same time, a new p
 forward, replacing the previous ad-hoc pattern of whichever agent did the work also editing the
 log itself.
 
-## Current state (as of 2026-09-06)
+## Current state (as of 2026-09-07)
 
-**Phase 1 (Workflow & screen design) and Phase 2 (Repo & infra skeleton) are both complete and
-committed.** The repo has a working Maven multi-module skeleton (boots but has no business logic
-yet) and a healthy local infra stack. **Next: Phase 3 — auth service** (register/login, JWT
-issuing) per `docs/roadmap.md`.
+**Phases 1–3 are complete and committed.** Phase 3 (auth service: register/login, JWT issuing)
+landed in commit `7dff70f`. **Next: Phase 4 — Gateway with JWT validation** per `docs/roadmap.md`.
 
 Local toolchain is installed and working on this machine (see "Environment" below) — a fresh
 session does not need to reinstall anything, just re-verify with the commands in that section.
@@ -93,6 +91,34 @@ Phase 2 scaffold and found 6 issues, all fixed in `ca5b9e3`:**
    was `2023.0.3`, which actually targets Spring Boot 3.2.x — Spring Boot 3.3.x compatibility was
    only added in `2023.0.4`. Bumped to `2023.0.4` to match `spring-boot.version` 3.3.4.
 
+### Phase 3 — Auth service
+
+- Built `POST /api/v1/auth/register` and `POST /api/v1/auth/login`: BCrypt password hashing,
+  default `USER` role assignment on registration, and JWT issuance (claims `sub`/`email`/`roles`,
+  1h expiry) on **both** register (auto-login on signup) and login. Errors follow RFC 7807
+  `application/problem+json`: 409 for duplicate email, 401 for invalid credentials, 400 for
+  validation failures. Flyway migration adds `users`/`roles`/`user_roles`. Datasource is wired to
+  the least-privilege `auth_app` Postgres role (not the superuser), per the Phase 2 fix #2 above.
+- Built test-first (TDD): a JUnit 5 unit test for JWT claim contents (`JwtServiceTest`) and a
+  Testcontainers-backed `@SpringBootTest` integration test for HTTP/DB behavior
+  (`AuthControllerTest`), each observed failing before its implementation existed.
+- **Known gap, not yet resolved:** `AuthControllerTest` (the Testcontainers-backed integration
+  test) could not be run to green in this environment. Root cause confirmed via direct
+  investigation (not just the implementing agent's report): Docker Desktop 4.89.0 on this machine
+  returns a locked-down/stub `/info` response (all fields empty except a `Labels` hint pointing at
+  an internal `docker_cli` proxy pipe) to any client that isn't the official `docker` CLI binary —
+  reproduced identically over the default named pipe, the `dockerDesktopLinuxEngine` named pipe,
+  and an explicitly-enabled TCP port (2375); `curl` against that same TCP port returns full genuine
+  data, but testcontainers/docker-java gets the stub every time regardless of transport. This looks
+  like a Docker Desktop-side API lockdown for non-official clients, not a config mistake on our
+  end. `JwtServiceTest` (the plain unit test, no Docker needed) was confirmed genuinely green.
+  A future session should **not** re-attempt the `DOCKER_HOST`/`exposeDockerAPIOnTCP2375` fixes
+  expecting a different result (see Environment note below) — this needs either a different Docker
+  Desktop version, a different container runtime, or running the test suite outside Docker
+  Desktop entirely (e.g. a Linux CI runner, or a real Linux/WSL2-native Docker Engine without
+  Docker Desktop's proxy layer).
+- Commit: `7dff70f`.
+
 ## Environment (this machine)
 
 Installed and verified working during Phase 2 — a fresh session should just re-verify, not
@@ -123,10 +149,23 @@ reinstall, unless one of these checks fails:
   though it's the usual expectation.
 - Verify the whole stack in one go: `docker compose ps` (expect all 3 healthy) and
   `mvn -q compile` / `./mvnw -q compile` from the repo root (expect exit 0, no output).
+- **Docker Desktop TCP API exposure (`exposeDockerAPIOnTCP2375`) tried during Phase 3, did NOT
+  fix Testcontainers:** the setting was flipped to `true` in both `%APPDATA%\Docker\settings.json`
+  **and** `%APPDATA%\Docker\settings-store.json`. The latter is the actual authoritative store in
+  this Docker Desktop version — `settings.json` alone gets silently overridden back to `false` by
+  `settings-store.json` on restart, which cost real time to discover. Even with the port genuinely
+  open (verified with `curl`), Testcontainers/docker-java still only gets a locked-down stub
+  `/info` response (see Phase 3 entry above for the full root-cause writeup) — so don't expect
+  this same TCP-exposure fix to work again without also addressing the underlying Docker Desktop
+  API lockdown.
 
-## Next up: Phase 3 — Auth service
+## Next up: Phase 4 — Gateway with JWT validation
 
-Per `docs/roadmap.md`: `users`/`roles`/`user_roles` tables + Flyway migrations,
-`POST /auth/register`, `POST /auth/login` issuing a JWT. Agents: `backend-service`,
-`workflow-rules` (confirm no `business-rules.md` changes needed). Remember: auth's datasource
-must connect as the `auth_app` Postgres role (see Phase 2 fix #2 above), not the superuser.
+Per `docs/roadmap.md`: Spring Cloud Gateway routes to all 5 backend services, JWT validation at
+the edge (reject unauthenticated/invalid tokens before they reach a service), Resilience4j
+(circuit breaker + timeout + retry) on sync routes. Preconditions: auth's JWT signing
+key/algorithm (from Phase 3, commit `7dff70f`) must be shared with or independently verifiable by
+the gateway. Separately, Phase 3's `AuthControllerTest` Testcontainers gap (see above) is still
+open — a future session should decide whether to fix the Docker/Testcontainers environment issue
+or move the auth integration test to a different verification strategy before this is considered
+fully closed, though it does not block starting Phase 4.
