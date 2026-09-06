@@ -37,7 +37,11 @@
 - Disabled CTA if event is `SOLD_OUT` or `CLOSED`.
 
 **4. Seat selection** — the centerpiece screen
-- Calls: `GET /api/v1/events/{eventId}/seats` (seat map + availability status per seat).
+- Calls two separate reads, merged client-side by `seatId` (per ADR-0001 — event never carries
+  availability): `GET /api/v1/events/{eventId}/seats` (event service — static layout + price tier
+  per seat, no availability) and `GET /api/v1/bookings/availability?eventId={eventId}` (booking
+  service — `{seatId, status}` for `HELD`/`SOLD` seats; any `seatId` absent from the response is
+  `AVAILABLE`).
 - User clicks seats (up to 6) → on each click: `POST /api/v1/bookings/hold` with the seat id(s),
   which creates/updates a `PENDING` booking and starts the 10-minute countdown (shown on screen,
   driven by `expiresAt` from the response).
@@ -257,7 +261,10 @@ prove the saga and concurrency handling actually work, not just the happy path.
 ```
 
 **Components**
-- `SeatMap` — renders sections/rows/`Seat`s from `GET /api/v1/events/{eventId}/seats`.
+- `SeatMap` — renders sections/rows/`Seat`s by merging two reads client-side: layout from
+  `GET /api/v1/events/{eventId}/seats` (event service) and live status from
+  `GET /api/v1/bookings/availability?eventId={eventId}` (booking service) — event's endpoint never
+  carries an availability field, per ADR-0001.
 - `Seat` — single seat square; visual variant is a pure function of `SeatAvailability` status.
 - `SeatMapLegend` — static legend for the four visual states below.
 - `CountdownTimer` — hold TTL countdown, driven by `expiresAt` from the hold response.
@@ -266,7 +273,9 @@ prove the saga and concurrency handling actually work, not just the happy path.
 - `HoldExpiredModal` — blocking modal shown when the countdown hits zero.
 - Hook: `useSeatSelection` — holds selected seat ids + total, calls `holdSeats()`.
 - Hook: `useCountdown` — derives mm:ss from `expiresAt`, exposes a `isExpiring` (≤2 min) flag.
-- API client: `fetchSeatMap()`, `holdSeats()`, `createCheckout()` in `bookingApi.ts`.
+- API client: `fetchEventSeats()` in `eventApi.ts` (layout only, no availability);
+  `fetchSeatAvailability()`, `holdSeats()`, `createCheckout()` in `bookingApi.ts` —
+  `useSeatSelection`/`SeatMap` call both and merge by `seatId`.
 
 **Visual states (must match `SeatAvailability` exactly — no extra states)**
 - `AVAILABLE` — outlined, clickable.
@@ -276,30 +285,34 @@ prove the saga and concurrency handling actually work, not just the happy path.
 - `SOLD` — filled dark/disabled, not clickable, permanent.
 
 **Screen-level states**
-- Loading: skeleton seat grid while `GET /api/v1/events/{eventId}/seats` is in flight.
+- Loading: skeleton seat grid while both `GET /api/v1/events/{eventId}/seats` and
+  `GET /api/v1/bookings/availability?eventId={eventId}` are in flight.
 - Empty/error: fetch failure → retry banner (no seats to render).
 - Normal: seats as above, countdown running (`< 2min` → `CountdownTimer` switches to a warning
   visual treatment).
-- Hold expired: countdown hits `00:00` → `HoldExpiredModal` shown, seat map refetched, selection
-  cleared, booking is `EXPIRED` (booking status lifecycle `PENDING → EXPIRED`).
+- Hold expired: countdown hits `00:00` → `HoldExpiredModal` shown, availability refetched (layout
+  is static, no need to refetch it), selection cleared, booking is `EXPIRED` (booking status
+  lifecycle `PENDING → EXPIRED`).
 - Seat race (409): user's `holdSeats()` call for a seat that was just taken by another session
-  returns 409 → `RaceConflictToast` shown inline, seat map refetches so the seat now shows `HELD`,
-  the rest of the user's held seats/countdown are unaffected.
+  returns 409 → `RaceConflictToast` shown inline, availability refetches so the seat now shows
+  `HELD`, the rest of the user's held seats/countdown are unaffected.
 - Max seats: 6th seat selected → 7th click is blocked client-side with an inline message ("max 6
   seats per booking" per booking rule) before ever calling the API.
 
 **Interaction flow**
-1. User arrives from screen 3 → `GET /api/v1/events/{eventId}/seats` → `SeatMap` renders seats by
-   status; no countdown yet (no hold placed).
+1. User arrives from screen 3 → `GET /api/v1/events/{eventId}/seats` (layout) and
+   `GET /api/v1/bookings/availability?eventId={eventId}` (status) fire together → `SeatMap` merges
+   both by `seatId` and renders seats by status; no countdown yet (no hold placed).
 2. User clicks an `AVAILABLE` seat → `holdSeats([seatId])` → 200 → seat turns "selected", `Booking`
    becomes/stays `PENDING`, `CountdownTimer` starts/refreshes from `expiresAt`.
 3. User clicks a `HELD` or `SOLD` seat → no-op (not clickable, cursor disabled).
 4. User selects a seat that another session grabbed a moment earlier → `holdSeats()` returns 409 →
-   `RaceConflictToast` appears, `SeatMap` refetches, that seat now renders `HELD`.
+   `RaceConflictToast` appears, availability refetches, that seat now renders `HELD`.
 5. User selects a 7th seat → blocked client-side, inline "max 6 seats" message, no API call.
 6. Countdown reaches ≤2 minutes → `CountdownTimer` switches to warning styling (still ticking).
 7. Countdown reaches `00:00` before checkout → `HoldExpiredModal` shown ("your hold expired") →
-   on dismiss, seat map refetches (expired seats now `AVAILABLE` again), selection/total cleared.
+   on dismiss, availability refetches (expired seats now `AVAILABLE` again), selection/total
+   cleared.
 8. User clicks "Proceed to payment" (enabled once ≥1 seat held) → `POST
    /api/v1/bookings/{bookingId}/checkout` → navigate to `/checkout/[bookingId]`.
 
@@ -334,7 +347,7 @@ prove the saga and concurrency handling actually work, not just the happy path.
   screen 4's "Proceed to payment").
 - `PaymentProcessingOverlay` — shown while polling for the async saga result.
 - Hook: `useBookingPolling(bookingId)` — polls `GET /api/v1/bookings/{bookingId}` until status is
-  `CONFIRMED`, `CANCELLED`, or a client-side poll-timeout.
+  `CONFIRMED`, `CANCELLED`, `EXPIRED`, or a client-side poll-timeout.
 - API client: `fetchBooking()` in `bookingApi.ts` (no payment-specific client — there is no
   `paymentApi.ts` and no `createPayment()`; payment has no inbound REST endpoint).
 
@@ -346,10 +359,10 @@ prove the saga and concurrency handling actually work, not just the happy path.
   on success it disables the form and transitions straight to Processing.
 - Processing (post-submit, pre-saga-result): `PaymentProcessingOverlay` shown, `useBookingPolling`
   active, countdown still visible/ticking (hold hasn't been consumed yet).
-- Resolved: polling detects `CONFIRMED` or `CANCELLED` → navigate to
-  `/checkout/[bookingId]/confirm`.
-- Hold expires mid-checkout (sweep fires before payment result arrives): polling sees status flip
-  to `EXPIRED`/`CANCELLED` → navigate to confirmation screen's failure view.
+- Resolved: polling detects `CONFIRMED`, `CANCELLED`, or `EXPIRED` → navigate to
+  `/checkout/[bookingId]/confirm`. `EXPIRED` specifically means the hold TTL sweep fired before the
+  payment result arrived (mid-checkout hold expiry) — the poll still detects it and routes to the
+  confirmation screen's failure view like `CANCELLED` does.
 
 **Interaction flow**
 1. User arrives from screen 4 → `GET /api/v1/bookings/{bookingId}` → `BookingSummary` renders

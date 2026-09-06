@@ -28,6 +28,13 @@
   - A seat's *sellability for a given event* (available/held/sold) is **not** stored here — see booking.
 - event never mutates seat sale state. It is read-heavy: browsing, filtering, seat map layout.
 
+**Endpoint — seat map layout (no availability):**
+- `GET /api/v1/events/{eventId}/seats` — returns the static seat map for the event: each seat's
+  `seatId`, `section`, `row`, `number`, and its `seatCategory` (name + price). This response
+  **never** includes an availability/sold/held flag — per ADR-0001, event has no knowledge of
+  `AVAILABLE`/`HELD`/`SOLD` state. See "Seat map contract (frontend composition)" under the
+  `booking` section below for how this is combined with live availability.
+
 ## booking (core)
 
 **Entities:** `Booking`, `BookingItem`, `SeatAvailability`, `SagaState`
@@ -48,6 +55,29 @@
 - A seat already `SOLD` or currently `HELD` by another booking cannot be selected — reject with 409.
 - `total` = sum of `BookingItem.price` at hold time; not recalculated from current category price.
 - Booking cannot move to `CONFIRMED` without a `PaymentCompleted` event for that bookingId.
+
+**Endpoint — live availability (no layout):**
+- `GET /api/v1/bookings/availability?eventId={eventId}` — returns, for every seat currently known
+  to booking for that event, `{ seatId, status }` where `status` is `AVAILABLE`, `HELD`, or `SOLD`
+  (from `SeatAvailability`). This response carries **no** section/row/number/price — booking has
+  no opinion on layout or pricing, only sale state. Seats with no `SeatAvailability` row yet (never
+  held or sold) are implicitly `AVAILABLE` and may be omitted from the response; the frontend
+  should treat any `seatId` from the event layout call that is absent from this response as
+  `AVAILABLE`.
+
+**Seat map contract (frontend composition — resolves the event/booking split from ADR-0001):**
+- The seat-selection screen requires **two separate client-side calls**, not one combined
+  endpoint:
+  1. `GET /api/v1/events/{eventId}/seats` (event service, via gateway) → layout + price tiers.
+  2. `GET /api/v1/bookings/availability?eventId={eventId}` (booking service, via gateway) → status
+     per `seatId`.
+- The frontend merges the two responses client-side by `seatId` to render the seat map (layout +
+  color-coded availability). This is a deliberate latency/complexity tradeoff for clean service
+  boundaries (ADR-0001, Consequences) — do **not** introduce a gateway-composed/aggregated
+  endpoint that merges these server-side; the gateway only routes, validates JWTs, and applies
+  Resilience4j per root `CLAUDE.md`, it does not own composition/business logic. Both calls poll
+  independently if the frontend needs to refresh availability (e.g. after a 409) without
+  re-fetching the static layout.
 
 ## payment (mock)
 
