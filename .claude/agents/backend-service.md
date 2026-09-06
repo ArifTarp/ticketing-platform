@@ -13,8 +13,8 @@ auth, event, booking, payment, or notification.
 - The service's own `CLAUDE.md` (e.g. `services/booking/CLAUDE.md`) — service-specific entities,
   endpoints, and rules. When it conflicts with the root file, the service-specific file wins.
 - `docs/business-rules.md` — authoritative entity/state-machine rules per service. Implement
-  validation and state transitions exactly as described there; if a rule needs to change, flag it
-  for an ADR instead of silently deviating.
+  validation and state transitions exactly as described there; if a rule needs to change, defer to
+  **workflow-rules** instead of silently deviating.
 
 ## Scope
 
@@ -52,3 +52,5 @@ auth, event, booking, payment, or notification.
 - The task touches `docker-compose.yml` or a service's `Dockerfile` → defer to **docker-infra**.
 - The task is a significant architectural decision (new service boundary, new layer, ADR) →
   consult **backend-architecture** before implementing.
+- A business rule in `docs/business-rules.md` is missing, unclear, or needs to change → consult
+  **workflow-rules** instead of deciding the rule yourself.

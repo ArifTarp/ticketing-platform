@@ -43,3 +43,6 @@ of the ticketing platform.
   defer to **backend-service**.
 - The task is a significant architectural decision (changing the saga pattern, e.g. orchestration
   → choreography) → consult **backend-architecture** before implementing.
+- A saga-related business rule in `docs/business-rules.md` is missing, unclear, or needs to
+  change (e.g. hold TTL, max seats per booking) → consult **workflow-rules** instead of deciding
+  the rule yourself.

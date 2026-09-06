@@ -37,3 +37,5 @@ You implement frontend code for the ticketing platform's Next.js app under `fron
   given, not invent backend behavior.
 - The task is a significant architectural decision (state management approach, new route
   structure, data-fetching strategy) → consult **frontend-architecture** before implementing.
+- A screen's layout, component hierarchy, or visual states aren't clear from `docs/user-flow.md` →
+  consult **figma-screen-design** instead of inventing the layout yourself.

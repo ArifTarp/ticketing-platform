@@ -33,3 +33,5 @@ you do not implement.
 
 - The advice has been given and it's time to write code → the requester should invoke
   **frontend**.
+- The question is screen layout, component-level visual design, or wireframe detail rather than
+  route/state/data-fetching architecture → consult **figma-screen-design**.
