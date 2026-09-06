@@ -11,9 +11,9 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>event-service</artifactId>
+  <artifactId>event</artifactId>
   <packaging>jar</packaging>
-  <name>event-service</name>
+  <name>event</name>
 
   <dependencies>
     <dependency>

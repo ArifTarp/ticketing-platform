@@ -11,14 +11,21 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>notification-service</artifactId>
+  <artifactId>notification</artifactId>
   <packaging>jar</packaging>
-  <name>notification-service</name>
+  <name>notification</name>
 
   <dependencies>
+    <!-- notification is a pure Kafka consumer with no inbound REST (per its own CLAUDE.md) —
+         starter-web is here only because actuator needs a servlet container to expose
+         health checks over HTTP; do not add a business REST controller to this module. -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>

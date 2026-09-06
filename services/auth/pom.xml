@@ -11,9 +11,9 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>auth-service</artifactId>
+  <artifactId>auth</artifactId>
   <packaging>jar</packaging>
-  <name>auth-service</name>
+  <name>auth</name>
 
   <dependencies>
     <dependency>

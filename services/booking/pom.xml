@@ -11,9 +11,9 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>booking-service</artifactId>
+  <artifactId>booking</artifactId>
   <packaging>jar</packaging>
-  <name>booking-service</name>
+  <name>booking</name>
 
   <dependencies>
     <dependency>

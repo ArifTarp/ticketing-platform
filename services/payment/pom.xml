@@ -11,14 +11,21 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>payment-service</artifactId>
+  <artifactId>payment</artifactId>
   <packaging>jar</packaging>
-  <name>payment-service</name>
+  <name>payment</name>
 
   <dependencies>
+    <!-- payment has no business-facing inbound REST (Kafka-only, per its own CLAUDE.md) —
+         starter-web is here only because actuator needs a servlet container to expose
+         health checks over HTTP; do not add a business REST controller to this module. -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
