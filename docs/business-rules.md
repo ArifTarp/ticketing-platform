@@ -60,6 +60,23 @@
   this lets a demo trigger the failure/rollback path deliberately, not just by luck.
 - On completion, publish `PaymentCompleted`; on failure, publish `PaymentFailed`. Never call
   booking synchronously — always via `payment.events`.
+- **No inbound REST endpoint on payment, by design.** There is exactly **one** trigger for the
+  entire checkout saga: `POST /api/v1/bookings/{id}/checkout` on the **booking** service (see
+  "Checkout workflow" step 2 below). That single call commits `SagaState` and publishes
+  `PaymentRequested`; payment only ever reacts to `payment.commands`. There is no
+  `POST /api/v1/payments` endpoint, and the frontend must never call payment directly — it isn't
+  reachable via the gateway's service routing for client calls, and adding one would contradict
+  root `CLAUDE.md`'s service responsibility ("payment ... Consumes a payment command ... No inbound
+  REST") and the "services never call each other's REST directly" communication rule.
+- **The mock payment form on the checkout screen is cosmetic UX only.** Because this is a mock
+  provider with no real PSP integration, there is nothing for a card-entry step to submit to on the
+  backend. The card form's "Pay now" button does not call a payment API — it simply confirms intent
+  and (if the checkout call hasn't already fired from the seat-selection screen) triggers
+  `POST /api/v1/bookings/{id}/checkout`, then the screen switches to polling
+  `GET /api/v1/bookings/{id}` for the saga's async result. Do not add a second backend call here;
+  do not add a `createPayment()`/`paymentApi.ts` client function that calls payment — the frontend's
+  "checkout" API surface is entirely `bookingApi.ts` (`holdSeats()`, `createCheckout()`,
+  `fetchBooking()`).
 
 ## notification (pure consumer)
 
@@ -86,7 +103,7 @@
 | # | Actor | Trigger | Action | Kafka topic (produce/consume) | Resulting state change |
 |---|-------|---------|--------|-------------------------------|-------------------------|
 | 1 | booking | User submits seat selection (`POST /bookings/hold`) | For each requested seat: acquire Redis distributed lock `eventId:seatId`; if lock acquired and `SeatAvailability` is `AVAILABLE`, create/attach `BookingItem` with price snapshot, set `SeatAvailability` → `HELD`, set Redis key TTL = 10 min; release lock. If any seat fails this check, reject the whole hold with 409 (see "Concurrent seat-race" below for the two-holder case). | — (no Kafka yet) | New `Booking` row, status `PENDING`, `expiresAt` = now + 10 min. Up to 6 `SeatAvailability` rows → `HELD`. |
-| 2 | booking | User submits payment (`POST /bookings/{id}/checkout`) while `Booking.status = PENDING` and `expiresAt` has not passed | Commit `SagaState(bookingId, step=PAYMENT_REQUESTED, status=IN_PROGRESS)`; publish `PaymentRequested` | produce → `payment.commands` | `SagaState` recorded; `Booking.status` stays `PENDING`. |
+| 2 | booking | User clicks "proceed to checkout" (`POST /bookings/{id}/checkout`) — the **single, sole trigger** for the saga; there is no separate payment-form submission that calls a backend endpoint (see "payment (mock)" section's note on the cosmetic checkout form) — while `Booking.status = PENDING` and `expiresAt` has not passed | Commit `SagaState(bookingId, step=PAYMENT_REQUESTED, status=IN_PROGRESS)`; publish `PaymentRequested` | produce → `payment.commands` | `SagaState` recorded; `Booking.status` stays `PENDING`. |
 | 3 | payment | Consumes `PaymentRequested` | Create `Payment` row (`status=PENDING`), run mock rule (default success; force-fail flag or amount-threshold triggers failure), update `Payment.status` to `COMPLETED` or `FAILED`, commit, then publish result | consume ← `payment.commands`; produce → `payment.events` (`PaymentCompleted` or `PaymentFailed`) | `Payment.status` → `COMPLETED` or `FAILED`. |
 | 4a | booking | Consumes `PaymentCompleted` for a `bookingId` still `PENDING` | Set each held seat's `SeatAvailability` → `SOLD`; set `Booking.status` → `CONFIRMED`; update `SagaState` step=`CONFIRMED`, status=`DONE`; commit, then publish | consume ← `payment.events`; produce → `booking.events` (`BookingConfirmed`) | `SeatAvailability` → `SOLD`; `Booking.status` → `CONFIRMED`. |
 | 5 | notification | Consumes `BookingConfirmed` | Write `Notification` row (`type=BOOKING_CONFIRMED`, `status=SENT`) | consume ← `booking.events` | New `Notification` row. |

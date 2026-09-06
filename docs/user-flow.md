@@ -47,8 +47,10 @@
 
 **5. Checkout / Payment**
 - Shows booking summary (seats, total) fetched via `GET /api/v1/bookings/{bookingId}`.
-- Mock card form (no real validation needed) → `POST /api/v1/payments` with `bookingId`.
-- This call returns immediately (payment is processed async via Kafka); the frontend then polls
+- Mock card form is cosmetic UX only — client-side validation, no backend payment call (there is
+  no `POST /api/v1/payments` endpoint; payment has no inbound REST). The one checkout trigger,
+  `POST /api/v1/bookings/{bookingId}/checkout`, already fired from screen 4's "Proceed to payment".
+- On "Pay now", the screen transitions straight into the processing overlay and polls
   `GET /api/v1/bookings/{bookingId}` (or subscribes via SSE/WebSocket if we add one later — polling
   is fine for the demo) until status is `CONFIRMED`, `CANCELLED`, or timeout.
 
@@ -322,17 +324,22 @@ prove the saga and concurrency handling actually work, not just the happy path.
 **Components**
 - `BookingSummary` — seats + total fetched from `GET /api/v1/bookings/{bookingId}`; reuses
   `CountdownTimer` since the hold is still live until payment resolves.
-- `PaymentForm` — mock card fields (no real validation needed per the doc's scope).
+- `PaymentForm` — mock card fields, client-side validation only (cosmetic — there is no real PSP
+  integration and no backend payment endpoint to submit to; per `business-rules.md` the checkout
+  saga has exactly one trigger, `POST /api/v1/bookings/{bookingId}/checkout`, already fired from
+  screen 4's "Proceed to payment").
 - `PaymentProcessingOverlay` — shown while polling for the async saga result.
 - Hook: `useBookingPolling(bookingId)` — polls `GET /api/v1/bookings/{bookingId}` until status is
   `CONFIRMED`, `CANCELLED`, or a client-side poll-timeout.
-- API client: `createPayment()`, `fetchBooking()` in `bookingApi.ts` / `paymentApi.ts`.
+- API client: `fetchBooking()` in `bookingApi.ts` (no payment-specific client — there is no
+  `paymentApi.ts` and no `createPayment()`; payment has no inbound REST endpoint).
 
 **States**
 - Loading: `BookingSummary` skeleton while `GET /api/v1/bookings/{bookingId}` loads.
 - Error — booking not `PENDING` (e.g. already expired before checkout even opened): redirect back
   to seat selection with a message, since only `PENDING` bookings can be paid.
-- Submitting: `PaymentForm` disabled, `POST /api/v1/payments` in flight.
+- Submitting: `PaymentForm` runs client-side field validation only (cosmetic — no backend call);
+  on success it disables the form and transitions straight to Processing.
 - Processing (post-submit, pre-saga-result): `PaymentProcessingOverlay` shown, `useBookingPolling`
   active, countdown still visible/ticking (hold hasn't been consumed yet).
 - Resolved: polling detects `CONFIRMED` or `CANCELLED` → navigate to
@@ -342,11 +349,14 @@ prove the saga and concurrency handling actually work, not just the happy path.
 
 **Interaction flow**
 1. User arrives from screen 4 → `GET /api/v1/bookings/{bookingId}` → `BookingSummary` renders
-   seats/total, countdown continues from where screen 4 left it.
-2. User fills mock card fields, clicks "Pay now" → `PaymentForm` disabled → `POST /api/v1/payments`
-   with `bookingId` → call returns immediately (202-style ack; real result comes via the saga).
-3. `PaymentProcessingOverlay` shown, `useBookingPolling` starts polling `GET
-   /api/v1/bookings/{bookingId}`.
+   seats/total, countdown continues from where screen 4 left it. The checkout saga trigger
+   (`POST /api/v1/bookings/{bookingId}/checkout`) has already fired from screen 4's "Proceed to
+   payment" CTA, committing `SagaState` and publishing `PaymentRequested`.
+2. User fills mock card fields, clicks "Pay now" → `PaymentForm` runs client-side validation only
+   (cosmetic; no backend payment endpoint exists to call) → form disables → screen transitions
+   directly into `PaymentProcessingOverlay`.
+3. `useBookingPolling` starts polling `GET /api/v1/bookings/{bookingId}` for the async saga
+   outcome.
 4. Saga resolves `PaymentCompleted` → booking flips `PENDING → CONFIRMED` → poll detects it →
    navigate to `/checkout/[bookingId]/confirm` (success view).
 5. Saga resolves `PaymentFailed` → booking flips `PENDING → CANCELLED`, seats released → poll
