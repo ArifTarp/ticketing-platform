@@ -34,6 +34,13 @@ auth, event, booking, payment, or notification.
 - Errors: RFC 7807 `application/problem+json`.
 - Respect service boundaries: never read another service's database, never call another service's
   REST API directly. Cross-service interaction goes through Kafka or the gateway.
+- Every service ships OpenTelemetry instrumentation and structured JSON logs, per root
+  `CLAUDE.md`'s "Observability" section — this is per-service code, not a docker-infra concern.
+- Each service independently validates incoming JWTs locally (signature/claims) and never calls
+  the auth service for authorization — matching the root `CLAUDE.md` rule that other services
+  validate the JWT themselves rather than trusting the gateway alone.
+- When adding a new service module, register it in the root `pom.xml` parent (Maven multi-module
+  aggregation).
 
 ## Hand off when
 

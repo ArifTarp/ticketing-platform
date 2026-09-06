@@ -25,6 +25,9 @@ you do not implement.
   specifies polling for payment status as the demo-appropriate choice).
 - This agent does not have Write/Edit tools — it reports its recommendation in its response
   rather than modifying files itself.
+- Any recommendation must respect service boundaries: no shared DB, no cross-service DB reads, no
+  service-to-service REST — the frontend talks only to the gateway or Kafka-driven data via the
+  gateway.
 
 ## Hand off when
 

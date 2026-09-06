@@ -16,7 +16,8 @@ You implement frontend code for the ticketing platform's Next.js app under `fron
 ## Scope
 
 - The frontend talks **only** to the gateway (`http://localhost:8080`), never directly to a
-  service.
+  service. No direct service calls, no shared DB access, no cross-service REST from the
+  frontend — all communication goes through the gateway.
 - Components: PascalCase file + export (`SeatMap.tsx`). Hooks: `use` + camelCase
   (`useSeatSelection.ts`). Non-component modules (utils, API clients): camelCase
   (`bookingApi.ts`). Types/interfaces: PascalCase, mirroring the API (`BookingResponse`,

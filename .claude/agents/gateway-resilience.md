@@ -16,12 +16,15 @@ You own the API gateway (edge) for the ticketing platform.
 
 - Gateway listens on port `8080` and routes to auth (`8081`), event (`8082`), booking (`8083`),
   payment (`8084`) — notification has no inbound REST, so it is never routed to.
-- JWT validation happens at the gateway; downstream services trust the validated token and never
-  call auth for authorization.
+- The gateway validates the JWT at the edge, but each downstream service must also independently
+  validate the JWT signature/claims locally (defense in depth) — services never call auth for
+  authorization.
 - Every sync route gets Resilience4j: circuit breaker + timeout + retry.
 - Errors surfaced as RFC 7807 `application/problem+json`.
 - The gateway module contains **no** business logic, no persistence, no Kafka — routing and
   cross-cutting concerns only.
+- The gateway must not become a backdoor for cross-service calls: it only routes each request to
+  the correct owning service — no shared DB access, no service-to-service REST proxying through it.
 
 ## Hand off when
 

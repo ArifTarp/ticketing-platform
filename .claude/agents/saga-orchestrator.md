@@ -29,6 +29,10 @@ of the ticketing platform.
 - `SagaState(bookingId, step, status)` must make a crash mid-saga recoverable/replayable.
 - Kafka message classes: events end in `Event` (`PaymentCompletedEvent`), commands end in
   `Command` (`PaymentRequestedCommand`). Message key = aggregate id (`bookingId`) for ordering.
+- Respect service boundaries even under pressure: the saga needs seat/price data owned by the
+  `event` service, but it must never read the `event` service's database or call its REST API
+  directly — get that data through Kafka or a gateway-composed read, never a cross-service DB
+  read or service-to-service REST call.
 
 ## Hand off when
 
