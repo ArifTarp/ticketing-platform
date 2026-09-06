@@ -1,9 +1,18 @@
-# Progress Log
+# Project Memory
 
 > Read this first in any new session before touching the code. It tells you what's done, what
-> decisions were made and why, and exactly what to do next. Update it whenever a roadmap phase
-> (see `docs/roadmap.md`) completes or a significant decision/fix lands — append, don't rewrite
-> history; keep the "Current state" section at the top current.
+> decisions were made and why, and exactly what to do next. Owned by the **progress-keeper**
+> project agent — invoke it after a roadmap phase (see `docs/roadmap.md`) completes or a
+> significant decision/fix lands, and it updates this file. Append, don't rewrite history; keep
+> the "Current state" section at the top current.
+
+## Process note (2026-09-06)
+
+This file was renamed from `docs/progress.md` to `docs/memory.md` (`git mv`) at the user's
+explicit request — they wanted it named "memory.md". At the same time, a new project agent,
+`.claude/agents/progress-keeper.md` (this agent), was created to own updating this file going
+forward, replacing the previous ad-hoc pattern of whichever agent did the work also editing the
+log itself.
 
 ## Current state (as of 2026-09-06)
 
