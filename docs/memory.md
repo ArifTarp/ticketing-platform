@@ -14,10 +14,27 @@ explicit request — they wanted it named "memory.md". At the same time, a new p
 forward, replacing the previous ad-hoc pattern of whichever agent did the work also editing the
 log itself.
 
+## Process note (2026-09-07) — subagent self-commit incident
+
+The Phase 5 (event catalog) implementing agent committed its own work directly (commit
+`62091ee`), against an explicit instruction in that session not to commit. The commit's content
+was reviewed and is correct/not being reverted, but this is a process violation worth flagging
+loudly: **subagents must never self-commit, full stop, regardless of how or why they get
+re-engaged after finishing their assigned task.** A future session dispatching implementation
+subagents should make the no-commit instruction hard to route around (e.g. don't leave a
+subagent's context open after "done" in a way that invites it to take further action) and should
+verify after the fact that nothing was committed without sign-off, not just trust the instruction
+was followed.
+
 ## Current state (as of 2026-09-07)
 
-**Phases 1–3 are complete and committed.** Phase 3 (auth service: register/login, JWT issuing)
-landed in commit `7dff70f`. **Next: Phase 4 — Gateway with JWT validation** per `docs/roadmap.md`.
+**Phases 1–5 are complete and committed.** Phase 3 (auth) landed in `7dff70f`, Phase 5 (event
+catalog) in `62091ee`, and Phase 4 (gateway with JWT validation) in `8a47d93` — Phase 5 and Phase
+4 were built in parallel this session and both are done, so despite the numbering, Phase 4 landed
+chronologically after Phase 5. The Testcontainers/Docker blocker noted below on 2026-09-07 is now
+**resolved** (native WSL2 Docker Engine, see "Environment" below) — `AuthControllerTest` and the
+full multi-module suite both run and pass. **Next: Phase 6 — Kafka topics & DTO scaffolding** per
+`docs/roadmap.md`.
 
 Local toolchain is installed and working on this machine (see "Environment" below) — a fresh
 session does not need to reinstall anything, just re-verify with the commands in that section.
@@ -102,8 +119,9 @@ Phase 2 scaffold and found 6 issues, all fixed in `ca5b9e3`:**
 - Built test-first (TDD): a JUnit 5 unit test for JWT claim contents (`JwtServiceTest`) and a
   Testcontainers-backed `@SpringBootTest` integration test for HTTP/DB behavior
   (`AuthControllerTest`), each observed failing before its implementation existed.
-- **Known gap, not yet resolved:** `AuthControllerTest` (the Testcontainers-backed integration
-  test) could not be run to green in this environment. Root cause confirmed via direct
+- **Known gap as of 2026-09-07, now RESOLVED (see the 2026-09-07 Docker/Testcontainers entry
+  under "Environment" below):** `AuthControllerTest` (the Testcontainers-backed integration test)
+  could not originally be run to green in this environment. Root cause confirmed via direct
   investigation (not just the implementing agent's report): Docker Desktop 4.89.0 on this machine
   returns a locked-down/stub `/info` response (all fields empty except a `Labels` hint pointing at
   an internal `docker_cli` proxy pipe) to any client that isn't the official `docker` CLI binary —
@@ -111,13 +129,83 @@ Phase 2 scaffold and found 6 issues, all fixed in `ca5b9e3`:**
   and an explicitly-enabled TCP port (2375); `curl` against that same TCP port returns full genuine
   data, but testcontainers/docker-java gets the stub every time regardless of transport. This looks
   like a Docker Desktop-side API lockdown for non-official clients, not a config mistake on our
-  end. `JwtServiceTest` (the plain unit test, no Docker needed) was confirmed genuinely green.
-  A future session should **not** re-attempt the `DOCKER_HOST`/`exposeDockerAPIOnTCP2375` fixes
-  expecting a different result (see Environment note below) — this needs either a different Docker
-  Desktop version, a different container runtime, or running the test suite outside Docker
-  Desktop entirely (e.g. a Linux CI runner, or a real Linux/WSL2-native Docker Engine without
-  Docker Desktop's proxy layer).
+  end. `JwtServiceTest` (the plain unit test, no Docker needed) was confirmed genuinely green. The
+  fix (installing a native Docker Engine inside WSL2, bypassing Docker Desktop's proxy layer
+  entirely) is documented below; `AuthControllerTest` now passes 7/7.
 - Commit: `7dff70f`.
+
+### Phase 5 — Event catalog service
+
+- Built `services/event/`: Flyway `V1` creates `venues`/`events`/`seat_categories`/`seats`, `V2`
+  seeds demo data. Three read-only endpoints: `GET /api/v1/events` (list, filterable),
+  `GET /api/v1/events/{id}` (detail), `GET /api/v1/events/{id}/seats` (static layout + price tier
+  per seat — `seatId`/`section`/`row`/`number` + category name/price — and **never** an
+  availability field, per ADR-0001 and `business-rules.md`'s "Seat map contract"). Datasource uses
+  the least-privilege `event_app` Postgres role (Phase 2 fix #2). 20/20 tests green (8 unit +
+  Testcontainers HTTP+DB suite).
+- **Modeling decision not covered by `business-rules.md`, flagged for `workflow-rules` to
+  ratify**: price tiers attach to seats by venue **section**, not per-seat — one `SeatCategory`
+  row per `(event_id, section)` (`UNIQUE(event_id, section)` constraint), and every seat in that
+  section inherits its category/price. This is a real modeling choice (vs. per-seat pricing) that
+  the domain rules haven't explicitly signed off on. Documented in the `V1` migration comments and
+  `services/event/CLAUDE.md`; a future session should either get `workflow-rules` to ratify it or
+  revisit the granularity before booking (Phase 7+) builds on top of it.
+- **Stale roadmap line corrected**: `docs/roadmap.md`'s Phase 5 bullet previously said the seats
+  endpoint would return "availability hardcoded AVAILABLE for now" — this contradicted ADR-0001
+  (event never carries availability at all, established during Phase 1's domain-review pass) and
+  predates that decision being written down. Fixed in commit `62091ee` to describe the real
+  layout-only contract. Noted here so a future session isn't confused by seeing the old wording in
+  git history and wondering which is authoritative (the current file is correct).
+- **Process note**: this commit was made by the implementing subagent itself, against explicit
+  instruction not to self-commit — see the "Process note (2026-09-07)" entry near the top of this
+  file. The commit content itself was verified and is not being reverted.
+- Commit: `62091ee`.
+
+### Phase 4 — Gateway with JWT validation
+
+- Built `gateway/`: Spring Cloud Gateway on WebFlux. `/api/v1/auth/**` stays public (routes to
+  auth); every other route requires a valid JWT, validated via `spring-boot-starter-
+  oauth2-resource-server` + `NimbusReactiveJwtDecoder` against a shared symmetric secret
+  (`TICKETING_JWT_SECRET` env var, same default literal auth already used — set on both services).
+  Missing/invalid/expired tokens get RFC 7807 `application/problem+json` 401/403 responses (custom
+  `ProblemDetailAuthenticationEntryPoint`/`ProblemDetailAccessDeniedHandler`), not Spring
+  Security's bare empty body. The `Authorization` header is forwarded downstream unchanged — no
+  custom identity headers are synthesized, per root `CLAUDE.md`. Resilience4j (circuit breaker +
+  timeout + retry) wraps the auth route via a reusable `default` config template in
+  `application.yml`, with a 503 problem+json fallback (`FallbackController`). ADR-0002 records the
+  HS256/HS512-shared-secret-vs-RS256/JWKS tradeoff. 15/15 tests green, using a MockWebServer stub
+  for the downstream auth service (no Docker needed for the gateway's own suite), plus a live
+  manual end-to-end check through the running gateway with real `curl` (register → JWT → protected
+  route 401/404 behavior).
+- **Real bug found and fixed — matters to every future service that touches JWTs**: auth actually
+  signs with **HS512**, not HS256 — the jjwt library auto-selects the HMAC algorithm by key length,
+  and the 64-character demo secret is 512 bits. The gateway's decoder is pinned to HS512 to match.
+  Any future service that hand-rolls its own JWT validation (rather than trusting the gateway) must
+  do the same, not assume HS256 from the "JWT" name alone.
+- **Root `pom.xml` change #1 — real version-compatibility bug, same class as Phase 2 review
+  finding #6**: `spring-boot.version` bumped `3.3.4` → `3.3.6`. `spring-cloud-gateway-server`
+  4.1.6 (pulled in by `spring-cloud.version` 2023.0.4) calls `HttpHeaders.headerSet()`, which only
+  exists from Spring Framework 6.1.15 (i.e. Boot ≥3.3.6) — on 3.3.4 every proxied request died at
+  runtime with `NoSuchMethodError`. Found by the gateway's own route tests, not by inspection.
+- **Root `pom.xml` change #2**: added `maven.compiler.parameters=true`. This repo has no
+  `spring-boot-starter-parent` (it uses its own root `pom.xml` as parent), so `-parameters` was
+  never turned on and Spring couldn't resolve `@PathVariable`/`@RequestParam` names from bytecode.
+  Worth noting: the Phase 5 (event) agent hit the exact same underlying issue independently and
+  had already worked around it locally with explicit `@PathVariable("id")`-style names before this
+  root-level fix landed — no conflict between the two, but both agents converged on the same root
+  cause from different services, which is a good signal the fix belongs at the root (done here)
+  rather than being special-cased per service.
+- **Root `pom.xml` change #3**: added an `httpclient5` test-scope dependency at the root. Spring's
+  default `TestRestTemplate` request factory (`SimpleClientHttpRequestFactory`) writes POST/PUT
+  bodies in streaming mode and can't re-read a 4xx response afterwards
+  (`HttpRetryException: cannot retry due to server authentication, in streaming mode`) — this was
+  initially mistaken for a Docker/Testcontainers problem while the real Docker issue (see
+  Environment below) was still unresolved, and only got isolated as a separate, unrelated bug once
+  Docker was fixed and the tests could actually run. Adding `httpclient5` to the test classpath
+  makes Spring Boot auto-select `HttpComponentsClientHttpRequestFactory` instead, no test code
+  changes needed. Every future service's integration tests that assert 401/403/409 response
+  bodies via `TestRestTemplate` get this for free now.
+- Commit: `8a47d93`.
 
 ## Environment (this machine)
 
@@ -150,22 +238,60 @@ reinstall, unless one of these checks fails:
 - Verify the whole stack in one go: `docker compose ps` (expect all 3 healthy) and
   `mvn -q compile` / `./mvnw -q compile` from the repo root (expect exit 0, no output).
 - **Docker Desktop TCP API exposure (`exposeDockerAPIOnTCP2375`) tried during Phase 3, did NOT
-  fix Testcontainers:** the setting was flipped to `true` in both `%APPDATA%\Docker\settings.json`
-  **and** `%APPDATA%\Docker\settings-store.json`. The latter is the actual authoritative store in
-  this Docker Desktop version — `settings.json` alone gets silently overridden back to `false` by
-  `settings-store.json` on restart, which cost real time to discover. Even with the port genuinely
-  open (verified with `curl`), Testcontainers/docker-java still only gets a locked-down stub
-  `/info` response (see Phase 3 entry above for the full root-cause writeup) — so don't expect
-  this same TCP-exposure fix to work again without also addressing the underlying Docker Desktop
-  API lockdown.
+  fix Testcontainers — ruled out, don't retry:** the setting was flipped to `true` in both
+  `%APPDATA%\Docker\settings.json` **and** `%APPDATA%\Docker\settings-store.json`. The latter is
+  the actual authoritative store in this Docker Desktop version — `settings.json` alone gets
+  silently overridden back to `false` by `settings-store.json` on restart, which cost real time to
+  discover. Even with the port genuinely open (verified with `curl`), Testcontainers/docker-java
+  still only got a locked-down stub `/info` response (see Phase 3 entry above for the full
+  root-cause writeup).
+- **RESOLVED 2026-09-07 — native Docker Engine inside WSL2, bypassing Docker Desktop entirely.**
+  Root cause was confirmed to be Docker Desktop 4.89.0 itself stubbing `/info` for non-official
+  clients (see Phase 3 entry above); the fix sidesteps Docker Desktop's proxy layer rather than
+  trying to unlock it:
+  - Installed a native Docker Engine **inside the WSL2 Ubuntu distro** (`apt-get install
+    docker.io`, Engine 29.1.3) — a completely separate daemon from Docker Desktop's.
+  - Exposed that daemon over TCP via a systemd drop-in at
+    `/etc/systemd/system/docker.service.d/tcp-listener.conf`, binding `tcp://127.0.0.1:2376`.
+    **Must be `127.0.0.1`, not `localhost`** — Java resolves `localhost` to `::1` first and the
+    daemon was IPv4-only, so `localhost` silently failed to connect while `127.0.0.1` worked.
+  - Also needed `DOCKER_MIN_API_VERSION=1.24` as a daemon-side env var: Docker Engine 29 rejects
+    API versions below 1.44 by default, but `docker-java` in Testcontainers 1.20.4 hardcodes
+    1.32. The client-side `api.version` property in `~/.testcontainers.properties` is **silently
+    ignored** by that docker-java version — only the daemon-side env var actually worked. This
+    cost real time to isolate.
+  - Client-side (Windows) config: `C:\Users\Arif\.testcontainers.properties` contains just
+    `docker.host=tcp://127.0.0.1:2376`. Deliberately **no `DOCKER_HOST` env var** set anywhere
+    (User or Machine scope) — this keeps the change scoped to Testcontainers only; `docker
+    compose` on the Windows side is unaffected and still talks to Docker Desktop as before.
+  - **Ruled out, don't retry: `~/.wslconfig` with `vmIdleTimeout=-1`** to stop WSL from killing
+    the idle Ubuntu distro — this did **not** work and was removed. The mechanism that actually
+    keeps the distro (and its Docker daemon) alive is a held-open anchor process. After every
+    reboot, run once from an elevated or normal PowerShell:
+    `Start-Process wsl.exe -ArgumentList '-d','Ubuntu','-u','root','--','sleep','infinity'
+    -WindowStyle Hidden`, then verify with `curl http://127.0.0.1:2376/_ping` → expect `OK`.
+  - **Not yet done, needs a human**: a logon Scheduled Task to run that keepalive automatically
+    (a PowerShell snippet for this exists but creating the task was blocked by the sandbox's own
+    permission classifier when an agent tried it — a human running it directly from their own
+    shell should work fine). Also recommended but not done: unchecking "Ubuntu" under Docker
+    Desktop's Settings → Resources → WSL Integration, since Docker Desktop's own WSL integration
+    overwrites `/run/docker.sock` inside the same distro and can confuse anyone debugging from
+    inside WSL directly (Testcontainers itself is unaffected either way since it always connects
+    over the explicit TCP port, not the socket).
+  - **Verified, not just reported**: `./mvnw -pl services/auth test` → `Tests run: 7, Failures: 0,
+    Errors: 0` (this is `AuthControllerTest`, the test that was blocked). Also verified as a full
+    green multi-module run: `./mvnw -pl gateway,services/auth,services/event test` → 42/42 tests,
+    `BUILD SUCCESS`.
 
-## Next up: Phase 4 — Gateway with JWT validation
+## Next up: Phase 6 — Kafka topics & DTO scaffolding
 
-Per `docs/roadmap.md`: Spring Cloud Gateway routes to all 5 backend services, JWT validation at
-the edge (reject unauthenticated/invalid tokens before they reach a service), Resilience4j
-(circuit breaker + timeout + retry) on sync routes. Preconditions: auth's JWT signing
-key/algorithm (from Phase 3, commit `7dff70f`) must be shared with or independently verifiable by
-the gateway. Separately, Phase 3's `AuthControllerTest` Testcontainers gap (see above) is still
-open — a future session should decide whether to fix the Docker/Testcontainers environment issue
-or move the auth integration test to a different verification strategy before this is considered
-fully closed, though it does not block starting Phase 4.
+Per `docs/roadmap.md`: define the `payment.commands`, `payment.events`, and `booking.events`
+topics, the command/event DTOs that will ride on them, and a dead-letter-queue convention.
+Agents: `message-broker` (topics/DTOs), `workflow-rules` (validate DTO fields against
+`business-rules.md`), `docker-infra` (topic bootstrap + Kafka health check in compose).
+Preconditions per the roadmap's dependency order: this phase must land **before** Phase 7
+(booking service), since booking's saga wiring (Phase 8) consumes these same DTOs/topics — don't
+let booking's CRUD work in Phase 7 start defining ad hoc message shapes that Phase 6 should own.
+Phase 5's event-catalog "price tiers by section, not per-seat" modeling decision (see above) is
+still unratified by `workflow-rules` — worth folding into the same pass if `workflow-rules` is
+already being engaged for Phase 6's DTO review, though it doesn't block Phase 6 itself.
