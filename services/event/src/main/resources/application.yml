@@ -4,3 +4,23 @@ server:
 spring:
   application:
     name: event-service
+  datasource:
+    # Least-privilege role, not the `ticketing` superuser (Phase 2 review finding): event_app can
+    # only CONNECT to ticketing_event, so a mistyped url pointing at another service's database
+    # fails loudly instead of silently crossing a service boundary.
+    url: jdbc:postgresql://localhost:5432/ticketing_event
+    username: event_app
+    password: event_app_pw
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Flyway owns the schema; validate catches entity/migration drift at startup.
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

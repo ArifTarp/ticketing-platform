@@ -55,7 +55,11 @@ agents have a concrete target instead of inferring one mid-implementation.
 
 ### Phase 5 — Event catalog service
 - `venues/events/seat_categories/seats` + Flyway; `GET /events`, `GET /events/{id}`,
-  `GET /events/{id}/seats` (availability hardcoded AVAILABLE for now). Seed demo data via Flyway.
+  `GET /events/{id}/seats` — the seats endpoint returns the **static layout only** (per seat:
+  `seatId`, `section`, `row`, `number`, and its seat category's name + price) and **never** an
+  availability/sold/held field; live availability comes from booking's
+  `GET /api/v1/bookings/availability?eventId=` and is merged client-side by `seatId`
+  (ADR-0001 + `business-rules.md` "Seat map contract"). Seed demo data via Flyway.
 - **Agents:** `backend-service`, `gateway-resilience` (route), `backend-architecture` (confirm the
   event/booking boundary before writing seat endpoints).
 - **Verify:** event container added to compose; `GET /api/v1/events` via the gateway returns
