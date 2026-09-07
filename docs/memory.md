@@ -28,13 +28,14 @@ was followed.
 
 ## Current state (as of 2026-09-07)
 
-**Phases 1–5 are complete and committed.** Phase 3 (auth) landed in `7dff70f`, Phase 5 (event
-catalog) in `62091ee`, and Phase 4 (gateway with JWT validation) in `8a47d93` — Phase 5 and Phase
-4 were built in parallel this session and both are done, so despite the numbering, Phase 4 landed
-chronologically after Phase 5. The Testcontainers/Docker blocker noted below on 2026-09-07 is now
-**resolved** (native WSL2 Docker Engine, see "Environment" below) — `AuthControllerTest` and the
-full multi-module suite both run and pass. **Next: Phase 6 — Kafka topics & DTO scaffolding** per
-`docs/roadmap.md`.
+**Phases 1–6 are complete and committed.** Phase 3 (auth) landed in `7dff70f`, Phase 5 (event
+catalog) in `62091ee`, Phase 4 (gateway with JWT validation) in `8a47d93` — Phase 5 and Phase 4
+were built in parallel this session and both are done, so despite the numbering, Phase 4 landed
+chronologically after Phase 5 — and Phase 6 (Kafka topics & DTO scaffolding) in `d35012b`. The
+Testcontainers/Docker blocker noted below on 2026-09-07 is now **resolved** (native WSL2 Docker
+Engine, see "Environment" below) — `AuthControllerTest` and the full multi-module suite both run
+and pass. **Next: Phase 7 — Booking service (CRUD + Redis seat holds, no saga yet — the seat-race
+concurrency logic)** per `docs/roadmap.md`.
 
 Local toolchain is installed and working on this machine (see "Environment" below) — a fresh
 session does not need to reinstall anything, just re-verify with the commands in that section.
@@ -207,6 +208,46 @@ Phase 2 scaffold and found 6 issues, all fixed in `ca5b9e3`:**
   bodies via `TestRestTemplate` get this for free now.
 - Commit: `8a47d93`.
 
+### Phase 6 — Kafka topics & DTO scaffolding
+
+- Added a new shared Maven module `messaging` (`com.demo.ticketing:messaging`), registered in the
+  root `pom.xml`'s `<modules>`. It owns the Kafka wire contracts shared by booking/payment/
+  notification: `PaymentRequestedCommand`, `PaymentCompletedEvent`, `PaymentFailedEvent`,
+  `BookingConfirmedEvent`, `BookingCancelledEvent` — each a Java record with a stable `eventId`
+  field for consumer-side dedup.
+- **Architectural decision, recorded as ADR-0003**: a shared module was chosen over per-service DTO
+  duplication. Rationale: Kafka wire-format agreement is a producer/consumer concern, not a
+  per-service one — duplicating DTOs risks silent drift between what booking publishes and what
+  payment/notification expect. This does **not** cross the "no shared DB / no direct REST"
+  service-boundary rule since it's a compile-time-only dependency (no runtime coupling, no shared
+  schema/data).
+- Reusable Kafka plumbing added to the `messaging` module: JSON (de)serialization config
+  (`KafkaJsonSupport`), a producer factory helper (`KafkaProducerFactorySupport`), and consumer
+  config (`KafkaConsumerConfigSupport`) wiring a `DefaultErrorHandler` to a
+  `DeadLetterPublishingRecoverer` (3 attempts, 1s fixed backoff, then `<topic>.DLT`) — this is the
+  DLQ convention every future consumer (Phase 7/8/9) should follow.
+- Explicit topic bootstrap instead of relying on Kafka auto-create: `infra/kafka/create-topics.sh`
+  (partitions=3, replication-factor=1 — single-broker demo), wired into `docker-compose.yml` as a
+  one-shot `kafka-topics-init` init container against the `INTERNAL` listener (`kafka:29092`) —
+  consistent with the Phase 2 fix that container-to-container traffic must use the internal
+  listener, not `localhost`. Verified live: `docker exec ticketing-kafka kafka-topics.sh --list`
+  showed all three topics (`booking.events`, `payment.commands`, `payment.events`) actually
+  created.
+- An embedded-Kafka round-trip test (`KafkaRoundTripTest` in the `messaging` module) proves at
+  least one command and one event DTO serialize/publish/consume correctly — `mvn -pl messaging
+  test`: 2/2 passed.
+- `services/{booking,payment,notification}/pom.xml` gained the `com.demo.ticketing:messaging`
+  dependency; their `CLAUDE.md` placeholders were replaced with real content (available DTOs, the
+  DLQ convention, what's deferred).
+- **Deliberately deferred to later phases, not built in Phase 6**: `SagaState` and its persistence,
+  the hold-TTL timeout sweep, actual `@KafkaListener`/`@Bean KafkaTemplate` wiring inside
+  booking/payment/notification, the payment mock's success/fail logic, the `Payment`/
+  `Notification` JPA entities, and any real per-service idempotency/dedup store (only the
+  *mechanism*, i.e. the DLQ error handler and JSON config, was provided — not a working dedup
+  table, since those services have no entities yet). This matters for whoever picks up Phase
+  7/8/9: the wire contracts exist and are tested, but zero business logic consumes them yet.
+- Commit: `d35012b`.
+
 ## Environment (this machine)
 
 Installed and verified working during Phase 2 — a fresh session should just re-verify, not
@@ -283,15 +324,33 @@ reinstall, unless one of these checks fails:
     green multi-module run: `./mvnw -pl gateway,services/auth,services/event test` → 42/42 tests,
     `BUILD SUCCESS`.
 
-## Next up: Phase 6 — Kafka topics & DTO scaffolding
+## Next up: Phase 7 — Booking service: CRUD + Redis seat holds (no saga yet)
 
-Per `docs/roadmap.md`: define the `payment.commands`, `payment.events`, and `booking.events`
-topics, the command/event DTOs that will ride on them, and a dead-letter-queue convention.
-Agents: `message-broker` (topics/DTOs), `workflow-rules` (validate DTO fields against
-`business-rules.md`), `docker-infra` (topic bootstrap + Kafka health check in compose).
-Preconditions per the roadmap's dependency order: this phase must land **before** Phase 7
-(booking service), since booking's saga wiring (Phase 8) consumes these same DTOs/topics — don't
-let booking's CRUD work in Phase 7 start defining ad hoc message shapes that Phase 6 should own.
-Phase 5's event-catalog "price tiers by section, not per-seat" modeling decision (see above) is
-still unratified by `workflow-rules` — worth folding into the same pass if `workflow-rules` is
-already being engaged for Phase 6's DTO review, though it doesn't block Phase 6 itself.
+Per `docs/roadmap.md`: build `services/booking/` — `bookings`/`booking_items`/`seat_availability`/
+`saga_state` + Flyway (datasource must use the least-privilege `booking_app` Postgres role, per
+the Phase 2 fix, not the superuser). Endpoints: `POST /bookings/hold`, `GET /bookings/{id}`,
+`GET /bookings?userId=me&status=`. Business rules to enforce: max 6 seats per booking, price
+snapshotted at hold time (not looked up live at confirm time).
+
+**The seat-race concurrency logic is the centerpiece of this phase**: a Redis distributed lock
+per `eventId:seatId`, 10-minute TTL, must resolve two concurrent hold requests on the same seat to
+exactly one 200 and one immediate 409 — via the Redis lock, not a DB unique-constraint race. This
+must be proven with an automated Testcontainers test racing two concurrent clients on the same
+seat, not just described in prose or manually spot-checked; the roadmap explicitly calls out that
+this test must pass reliably (not flaky).
+
+The `messaging` module's DTOs (Phase 6, commit `d35012b`) are now available as a dependency, but
+Phase 7 itself does not need Kafka — booking only starts publishing/consuming (`PaymentRequested`,
+`PaymentCompleted`/`Failed`, `booking.events`) in Phase 8's saga wiring. Don't reach for Kafka
+here.
+
+**Carried-forward open item, worth resolving before or during this phase rather than letting it
+linger further**: Phase 5's event-catalog modeling decision — price tiers attach to seats by venue
+**section**, not per-seat (`UNIQUE(event_id, section)` on `seat_categories`) — is still unratified
+by `workflow-rules`. Phase 7's booking logic will read seat/price data shaped by that decision
+(price snapshotting at hold time reads from event's per-section pricing), so it's worth getting
+`workflow-rules` sign-off now rather than building booking's price-snapshot logic on top of an
+unratified model and having to revisit it later.
+
+Agents per the roadmap: `saga-orchestrator` (owns booking's concurrency-sensitive lock code),
+`backend-service` (plain CRUD/entities), `gateway-resilience` (route).
