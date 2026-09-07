@@ -31,6 +31,7 @@
   </properties>
 
   <modules>
+    <module>messaging</module>
     <module>gateway</module>
     <module>services/auth</module>
     <module>services/event</module>

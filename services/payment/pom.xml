@@ -16,6 +16,13 @@
   <name>payment</name>
 
   <dependencies>
+    <!-- Shared Kafka command/event DTOs + producer/consumer/DLQ config support, per
+         docs/adr/0003-shared-messaging-module-for-kafka-contracts.md. -->
+    <dependency>
+      <groupId>com.demo.ticketing</groupId>
+      <artifactId>messaging</artifactId>
+      <version>${project.version}</version>
+    </dependency>
     <!-- payment has no business-facing inbound REST (Kafka-only, per its own CLAUDE.md) —
          starter-web is here only because actuator needs a servlet container to expose
          health checks over HTTP; do not add a business REST controller to this module. -->

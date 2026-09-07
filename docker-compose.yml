@@ -46,6 +46,24 @@ services:
       retries: 10
       start_period: 20s
 
+  # One-shot init container: creates the application topics (payment.commands, payment.events,
+  # booking.events) explicitly instead of relying on Kafka auto-create, so partition count /
+  # replication factor are deliberate (see infra/kafka/create-topics.sh) rather than whatever the
+  # broker's auto-create defaults happen to be. Uses the INTERNAL listener (kafka:29092) since
+  # this runs as another container on the compose network, per the dual-listener setup above.
+  kafka-topics-init:
+    image: apache/kafka:3.8.0
+    container_name: ticketing-kafka-topics-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./infra/kafka/create-topics.sh:/create-topics.sh:ro
+    environment:
+      BOOTSTRAP_SERVER: kafka:29092
+    entrypoint: ["/bin/sh", "/create-topics.sh"]
+    restart: "no"
+
   redis:
     image: redis:7-alpine
     container_name: ticketing-redis
