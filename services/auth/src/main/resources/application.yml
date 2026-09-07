@@ -16,5 +16,7 @@ spring:
 # and be rotated. Fine for this interview-showcase demo only.
 auth:
   jwt:
-    secret: "1e5e6f3c8a2b4d7e9f0c1a3b5d7e9f1c3a5b7d9e1f3a5c7b9d1e3f5a7c9b1d3e"
+    # Shared with the gateway (which verifies what this service signs) via the same env var and the
+    # same local-dev default — see docs/adr/0002-hmac-shared-secret-jwt-validation.md.
+    secret: "${TICKETING_JWT_SECRET:1e5e6f3c8a2b4d7e9f0c1a3b5d7e9f1c3a5b7d9e1f3a5c7b9d1e3f5a7c9b1d3e}"
     expiration-seconds: 3600

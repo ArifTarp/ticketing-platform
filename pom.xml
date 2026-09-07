@@ -15,9 +15,17 @@
   <properties>
     <java.version>21</java.version>
     <maven.compiler.release>21</maven.compiler.release>
+    <!-- spring-boot-starter-parent normally turns this on; we use our own parent, so set it
+         explicitly. Without it, Spring cannot infer @PathVariable/@RequestParam names from method
+         parameters and fails at runtime with "parameter name information not available". -->
+    <maven.compiler.parameters>true</maven.compiler.parameters>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <spring-boot.version>3.3.4</spring-boot.version>
+    <!-- Keep these two in step: spring-cloud 2023.0.4 ships spring-cloud-gateway-server 4.1.6,
+         whose ForwardedHeadersFilter calls HttpHeaders.headerSet() — an API that only exists from
+         Spring Framework 6.1.15, i.e. Spring Boot >= 3.3.6. On Boot 3.3.4 every proxied request
+         died with NoSuchMethodError at runtime (found in Phase 4 by the gateway route tests). -->
+    <spring-boot.version>3.3.6</spring-boot.version>
     <spring-cloud.version>2023.0.4</spring-cloud.version>
     <resilience4j.version>2.2.0</resilience4j.version>
   </properties>
@@ -30,6 +38,21 @@
     <module>services/payment</module>
     <module>services/notification</module>
   </modules>
+
+  <!-- Applies to every module: Spring Boot's default TestRestTemplate factory
+       (SimpleClientHttpRequestFactory) writes POST/PUT bodies in streaming mode and cannot
+       retry/read a 4xx response afterwards (HttpRetryException: "cannot retry due to server
+       authentication, in streaming mode"). Adding this on the test classpath makes Spring Boot
+       auto-select HttpComponentsClientHttpRequestFactory instead — no test code changes needed.
+       Found in Phase 4/5 verification: every integration test asserting a 401/403/409 response
+       body via TestRestTemplate needs it. -->
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.httpcomponents.client5</groupId>
+      <artifactId>httpclient5</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
 
   <dependencyManagement>
     <dependencies>

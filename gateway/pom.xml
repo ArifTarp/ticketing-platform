@@ -20,13 +20,40 @@
       <groupId>org.springframework.cloud</groupId>
       <artifactId>spring-cloud-starter-gateway</artifactId>
     </dependency>
+    <!-- Bridges Spring Cloud Gateway's CircuitBreaker filter onto Resilience4j (reactive).
+         The gateway filter needs a ReactiveCircuitBreakerFactory, which the plain
+         resilience4j-spring-boot3 dependency below does NOT provide on its own. -->
+    <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-circuitbreaker-reactor-resilience4j</artifactId>
+    </dependency>
+    <!-- Gives us the `resilience4j.*` configuration-property binding (configs/instances),
+         so breaker + time limiter settings live in application.yml, not in Java. -->
     <dependency>
       <groupId>io.github.resilience4j</groupId>
       <artifactId>resilience4j-spring-boot3</artifactId>
     </dependency>
+    <!-- Edge JWT validation. Reactive (WebFlux) resource server; HS256/HS512 shared-secret
+         decoder is built in GatewayJwtConfig. No jjwt here on purpose: the gateway only
+         *validates*, it never signs. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Local stub backend for route tests: no Docker/Testcontainers needed at the edge.
+         Version comes from the Spring Boot BOM's okhttp-bom import. -->
+    <dependency>
+      <groupId>com.squareup.okhttp3</groupId>
+      <artifactId>mockwebserver</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

@@ -4,3 +4,103 @@ server:
 spring:
   application:
     name: gateway
+  cloud:
+    gateway:
+      routes:
+        # --- auth (Phase 3) -------------------------------------------------------------------
+        # Public: register/login are exactly the calls a client makes when it has no token yet.
+        # Path is forwarded verbatim (no StripPrefix) because auth maps its controller at
+        # /api/v1/auth/**.
+        - id: auth
+          uri: ${services.auth.uri}
+          predicates:
+            - Path=/api/v1/auth/**
+          filters:
+            # Filter order = declaration order. CircuitBreaker is declared first so it is the
+            # OUTER filter: the time-limiter budget covers the whole attempt (including retries),
+            # and one client request counts as one call in the breaker's sliding window.
+            - name: CircuitBreaker
+              args:
+                name: authCircuitBreaker
+                fallbackUri: forward:/fallback/auth
+            # Retry is INNER, and only for safe/idempotent methods. POST /auth/register and
+            # POST /auth/login are NOT retried on purpose:
+            #  1. A 5xx from auth may mean the request already took effect (a user row was
+            #     written) and the response was lost — replaying it is not safe.
+            #  2. Spring Cloud Gateway replays the request without re-buffering its body unless a
+            #     CacheRequestBody filter is added, so a retried POST can reach auth with an empty
+            #     body. We deliberately do not add body caching at the edge.
+            # Connection-refused retries for POST would be safe in principle (the request never
+            # arrived), but the Retry filter cannot express "connect errors only, never response
+            # statuses" without also disabling its status matching — not worth the footgun here.
+            # The circuit breaker above already covers the "auth is down" case.
+            - name: Retry
+              args:
+                retries: 2
+                methods: GET
+                series: SERVER_ERROR
+                exceptions:
+                  - java.io.IOException
+                  - java.util.concurrent.TimeoutException
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 200ms
+                  factor: 2
+                  basedOnPreviousValue: false
+        # --- event (Phase 5), booking (Phase 7) -----------------------------------------------
+        # Added here later, same three filters, referencing the `default` resilience config below.
+        # payment and notification never get a route: they are Kafka-only by design.
+
+# Downstream service locations. Externalized so tests can point them at a stub and Docker Compose
+# can point them at container hostnames without touching this file.
+services:
+  auth:
+    uri: ${SERVICE_AUTH_URI:http://localhost:8081}
+
+# Edge JWT validation. The secret is shared with the auth service (which signs with it); see
+# docs/adr/0002-hmac-shared-secret-jwt-validation.md. Same env var name on both sides, same
+# demo-only default literal. NEVER ship a hardcoded secret like this to production.
+security:
+  jwt:
+    secret: ${TICKETING_JWT_SECRET:1e5e6f3c8a2b4d7e9f0c1a3b5d7e9f1c3a5b7d9e1f3a5c7b9d1e3f5a7c9b1d3e}
+    # Must match what auth actually emits. jjwt's signWith(key) auto-selects by key length, and
+    # the 64-byte demo secret yields HS512.
+    mac-algorithm: HS512
+
+# Reusable resilience template for every sync route. `configs.default` is Resilience4j's special
+# base config; a new route in Phase 5/7 only needs an `instances.<name>` entry inheriting it, where
+# <name> matches the `CircuitBreaker` filter's `name` arg on that route.
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50          # open once half of the recent calls fail
+        slowCallDurationThreshold: 2s
+        slowCallRateThreshold: 50
+        waitDurationInOpenState: 10s      # then probe with half-open calls
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        registerHealthIndicator: true
+    instances:
+      authCircuitBreaker:
+        baseConfig: default
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 3s               # per client request, retries included
+        cancelRunningFuture: true
+    instances:
+      authCircuitBreaker:
+        baseConfig: default
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

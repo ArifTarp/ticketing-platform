@@ -2,5 +2,129 @@
 
 > Loaded when working inside `gateway/`. See root `CLAUDE.md` for shared conventions.
 
-Placeholder — populated in Phase 4 (JWT validation, route definitions, Resilience4j breaker/
-timeout/retry template). Owns: routing, JWT validation, Resilience4j. No business logic, no DB.
+Spring Cloud Gateway (WebFlux) on port **8080**. The only inbound door to the platform: the
+frontend talks to `http://localhost:8080` and never to a service directly.
+
+## What this module owns
+
+1. **Routing** — path → owning service, nothing else.
+2. **Edge JWT validation** — reject unauthenticated/invalid tokens before they cost a service a
+   thread.
+3. **Resilience4j** — circuit breaker + timeout on every sync route, retry on safe methods, plus a
+   503 fallback.
+4. **RFC 7807 error shape** for everything the gateway itself answers (401/403/503).
+
+## What must never live here
+
+No business logic, no persistence, no Kafka, no DTO/domain model, no cross-service composition.
+The gateway routes each request to the **one** service that owns it; it is not a place to join two
+services' data, and it never proxies service-to-service calls (those go over Kafka — root
+`CLAUDE.md`, "Communication rules"). If a task needs the gateway to *decide* something about
+bookings, seats or payments, that task belongs in a service.
+
+## Route table
+
+| Path                | Method(s) | Target                        | Auth     | Phase |
+|---------------------|-----------|-------------------------------|----------|-------|
+| `/api/v1/auth/**`   | any       | `${services.auth.uri}` (8081)  | **open** | 3/4   |
+| `/actuator/health`  | GET       | gateway itself                | open     | 4     |
+| `/fallback/{service}` | any     | gateway itself (internal forward) | open | 4     |
+| everything else     | any       | —                             | JWT required | — |
+
+Not yet routed, by design:
+
+- **event** (8082) — Phase 5, `/api/v1/events/**`.
+- **booking** (8083) — Phase 7, `/api/v1/bookings/**`.
+- **payment** (8084) and **notification** (8085) — **never**. They have no inbound REST; they are
+  Kafka-only. Do not add a route for them.
+
+Paths are forwarded **verbatim** (no `StripPrefix`): services map their controllers at the full
+`/api/v1/<resource>` path.
+
+### Adding a route (Phases 5/7)
+
+1. Add `services.<name>.uri` to `application.yml` (env-var indirection + localhost default).
+2. Add the route with the same two filters, using a `CircuitBreaker` name of `<name>CircuitBreaker`
+   and `fallbackUri: forward:/fallback/<name>`.
+3. Add `resilience4j.circuitbreaker.instances.<name>CircuitBreaker.baseConfig: default` and the
+   matching `resilience4j.timelimiter.instances.<name>CircuitBreaker` entry.
+4. Nothing else — `FallbackController` is generic over `{service}` and the route is protected by
+   default (deny-by-default in `SecurityConfig`).
+
+## JWT validation contract
+
+- **Algorithm: HS512**, symmetric, shared secret with the auth service — see
+  `docs/adr/0002-hmac-shared-secret-jwt-validation.md` for why HMAC instead of RS256/JWKS.
+- **Secret:** env var `TICKETING_JWT_SECRET` (same name and same demo default in
+  `gateway/src/main/resources/application.yml` as in `services/auth/src/main/resources/application.yml`).
+- Auth signs with jjwt's `signWith(key)`, which picks the algorithm from the key length; the
+  64-character demo secret is 512 bits, hence HS512. **If the secret's length ever changes, update
+  `security.jwt.mac-algorithm` too** — the decoder is pinned to exactly one algorithm on purpose, so
+  a mismatch shows up as blanket 401s.
+- **Claims:** `sub` (userId), `email`, `roles`, plus `iat`/`exp`. Validated: signature, `exp`, `nbf`
+  (Spring's default 60s clock skew). No `iss`/`aud` — auth does not set them; add an issuer check
+  here first if a second issuer ever appears.
+- **Identity propagation:** the incoming `Authorization` header is forwarded downstream unchanged
+  and **no** `X-User-*` headers are added. Downstream services validate the same token themselves
+  (root `CLAUDE.md`) — a trusted header from the gateway would make them depend on the gateway for
+  authorization, which is exactly what we do not want.
+- Public paths are listed in `SecurityConfig.PUBLIC_PATHS`; everything else is
+  `authenticated()`. Role-based rules (`hasRole("ADMIN")`) arrive with the admin routes in Phase 14;
+  the 403 handler for them is already wired and tested.
+
+## Resilience4j
+
+Both templates live under `configs.default` in `application.yml`, and each route's instances
+inherit them via `baseConfig: default`. **The Resilience4j instance name must equal the
+`CircuitBreaker` filter's `name` arg** — that is how Spring Cloud CircuitBreaker looks the
+configuration up.
+
+| Config                                    | Meaning                                                                 |
+|-------------------------------------------|-------------------------------------------------------------------------|
+| `resilience4j.circuitbreaker.configs.default` | 20-call count window, opens at 50% failures (min 10 calls) or 50% slow calls (>2s), stays open 10s, then 3 half-open probes. |
+| `resilience4j.timelimiter.configs.default`    | 3s budget for one client request, **retries included**.             |
+| `instances.authCircuitBreaker`            | The auth route's breaker + time limiter.                                |
+
+Filter order inside a route is declaration order, and it is deliberate:
+
+- **CircuitBreaker first (outer)** — one client request counts once in the breaker window, and the
+  3s time limiter bounds the whole attempt rather than each retry.
+- **Retry second (inner)**, `methods: GET` only. POSTs (`/auth/register`, `/auth/login`) are never
+  retried: a 5xx may mean the write already happened, and Spring Cloud Gateway replays a request
+  without re-buffering its body unless a `CacheRequestBody` filter is added — a retried POST could
+  reach the service with an empty body. The breaker + fallback already cover "the service is down".
+
+Breaker open, time limiter fired, or connection refused → internal forward to
+`/fallback/{service}` → **503 `application/problem+json`**. The client never sees a Netty/connect
+error.
+
+## Error contract
+
+Everything the gateway answers itself is `application/problem+json` with `status`, `title`,
+`detail` and `instance` (the caller's original path):
+
+| Situation                              | Status | Produced by                              |
+|----------------------------------------|--------|------------------------------------------|
+| No/invalid/expired/wrong-signature JWT | 401    | `ProblemDetailAuthenticationEntryPoint`  |
+| Authenticated but not allowed          | 403    | `ProblemDetailAccessDeniedHandler`       |
+| Downstream down/slow/breaker open      | 503    | `FallbackController`                     |
+
+Spring Security's reactive handlers run before any `@RestControllerAdvice`, which is why these are
+explicit handlers writing the body via `ProblemDetailResponseWriter` rather than an exception
+handler. Downstream error bodies (e.g. auth's 401 for bad credentials) pass through untouched.
+
+## Tests
+
+`gateway/src/test/java/com/demo/ticketing/gateway/` — **no Docker, no Testcontainers**, and it must
+stay that way: the "downstream service" is an `okhttp3.mockwebserver.MockWebServer` on a random port
+wired in through `@DynamicPropertySource` overriding `services.auth.uri`.
+
+- `AuthRouteSecurityTest` — auth route open, header forwarded unchanged, 401 problem+json for
+  missing/garbage/expired/wrong-secret/wrong-algorithm tokens, valid token passes the edge.
+- `AuthRouteResilienceTest` — slow downstream → 503 fallback; GET retried on 5xx; POST not retried.
+- `DownstreamUnavailableTest` — unreachable service → 503 fallback, breaker opens.
+- `ProblemDetailHandlersTest` — the 401/403 bodies themselves.
+- `TestJwt` mints tokens with the same secret/claims auth issues, so tests never need auth running.
+
+Keep resilience tests deterministic: override the timeouts/window sizes per test class with
+`@SpringBootTest(properties = ...)`, never `Thread.sleep`.
