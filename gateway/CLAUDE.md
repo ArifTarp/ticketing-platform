@@ -27,16 +27,23 @@ bookings, seats or payments, that task belongs in a service.
 | Path                | Method(s) | Target                        | Auth     | Phase |
 |---------------------|-----------|-------------------------------|----------|-------|
 | `/api/v1/auth/**`   | any       | `${services.auth.uri}` (8081)  | **open** | 3/4   |
+| `/api/v1/events/**` | any (GET only today) | `${services.event.uri}` (8082) | **open** | 5/7 |
+| `/api/v1/bookings/**` | any     | `${services.booking.uri}` (8083) | JWT required | 7 |
 | `/actuator/health`  | GET       | gateway itself                | open     | 4     |
 | `/fallback/{service}` | any     | gateway itself (internal forward) | open | 4     |
 | everything else     | any       | —                             | JWT required | — |
 
-Not yet routed, by design:
+Not yet routed:
 
-- **event** (8082) — Phase 5, `/api/v1/events/**`.
-- **booking** (8083) — Phase 7, `/api/v1/bookings/**`.
 - **payment** (8084) and **notification** (8085) — **never**. They have no inbound REST; they are
   Kafka-only. Do not add a route for them.
+
+`event` is public because its catalog reads need no login (`services/event/CLAUDE.md`: "No
+security/JWT. The catalog reads are public."). Every endpoint under `/api/v1/events/**` is GET-only
+today, so Retry applies uniformly (no unsafe POST to exclude, unlike `booking`). When Phase 14 adds
+admin write endpoints (`POST /venues`, `/events`, ...) under this same prefix, the `PUBLIC_PATHS`
+entry in `SecurityConfig` will need to be narrowed or those writes moved behind a role check —
+today's blanket `/api/v1/events/**` entry would otherwise leave them open too.
 
 Paths are forwarded **verbatim** (no `StripPrefix`): services map their controllers at the full
 `/api/v1/<resource>` path.
@@ -84,6 +91,8 @@ configuration up.
 | `resilience4j.circuitbreaker.configs.default` | 20-call count window, opens at 50% failures (min 10 calls) or 50% slow calls (>2s), stays open 10s, then 3 half-open probes. |
 | `resilience4j.timelimiter.configs.default`    | 3s budget for one client request, **retries included**.             |
 | `instances.authCircuitBreaker`            | The auth route's breaker + time limiter.                                |
+| `instances.bookingCircuitBreaker`         | The booking route's breaker + time limiter.                             |
+| `instances.eventCircuitBreaker`           | The event route's breaker + time limiter.                               |
 
 Filter order inside a route is declaration order, and it is deliberate:
 
@@ -122,6 +131,13 @@ wired in through `@DynamicPropertySource` overriding `services.auth.uri`.
 - `AuthRouteSecurityTest` — auth route open, header forwarded unchanged, 401 problem+json for
   missing/garbage/expired/wrong-secret/wrong-algorithm tokens, valid token passes the edge.
 - `AuthRouteResilienceTest` — slow downstream → 503 fallback; GET retried on 5xx; POST not retried.
+- `BookingRouteTest` — booking route protected (401 without a token, downstream never hit), valid
+  token forwards path/query/`Authorization` header verbatim, `POST /bookings/hold` not retried on
+  5xx, `GET` retried — same pattern as the auth tests, against `services.booking.uri`.
+- `EventRouteTest` — event route public (no token needed to reach it), path/query forwarded
+  verbatim, `Authorization` header forwarded unchanged when present with no invented identity
+  headers, `GET` retried on 5xx (every event endpoint is GET, so there is no unsafe-method case to
+  cover here) — against `services.event.uri`.
 - `DownstreamUnavailableTest` — unreachable service → 503 fallback, breaker opens.
 - `ProblemDetailHandlersTest` — the 401/403 bodies themselves.
 - `TestJwt` mints tokens with the same secret/claims auth issues, so tests never need auth running.

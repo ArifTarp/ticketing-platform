@@ -23,6 +23,13 @@ public class SecurityConfig {
     private static final String[] PUBLIC_PATHS = {
             // Registration and login: the caller has no token yet, by definition.
             "/api/v1/auth/**",
+            // event's catalog reads are public per services/event/CLAUDE.md ("No security/JWT. The
+            // catalog reads are public.") — browsing the event list/detail/seat map needs no login
+            // (docs/user-flow.md screens 2-4). Every endpoint under this path is GET-only today;
+            // Phase 14's admin write endpoints (POST /venues, /events, ...) will need to either move
+            // under a separate protected prefix or gain their own role check when they land, since
+            // this entry currently permits the whole /api/v1/events/** subtree.
+            "/api/v1/events/**",
             // Liveness/readiness for Docker Compose and future orchestration.
             "/actuator/health",
             "/actuator/health/**",

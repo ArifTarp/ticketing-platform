@@ -89,9 +89,17 @@ class AuthRouteSecurityTest {
         assertThat(forwarded.getHeader("X-User-Roles")).isNull();
     }
 
+    // Generic stand-in for "some protected path with no configured route", used only to exercise
+    // the deny-by-default authentication rule in isolation from any real route. `/api/v1/events`
+    // used to serve this purpose (Phase 5's route didn't exist yet), but event now has both a real
+    // route and a PUBLIC_PATHS entry (it's an open catalog, see SecurityConfig), so it can no longer
+    // stand in for "protected". This path matches no route predicate and no PUBLIC_PATHS entry, so
+    // it stays protected and unroutable on purpose.
+    private static final String UNROUTED_PROTECTED_PATH = "/api/v1/unrouted-protected-resource";
+
     @Test
     void protectedPathWithoutTokenIsRejectedWith401ProblemJson() {
-        client.get().uri("/api/v1/events")
+        client.get().uri(UNROUTED_PROTECTED_PATH)
                 .exchange()
                 .expectStatus().isUnauthorized()
                 .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON)
@@ -99,12 +107,12 @@ class AuthRouteSecurityTest {
                 .jsonPath("$.status").isEqualTo(401)
                 .jsonPath("$.title").isEqualTo("Unauthorized")
                 .jsonPath("$.detail").exists()
-                .jsonPath("$.instance").isEqualTo("/api/v1/events");
+                .jsonPath("$.instance").isEqualTo(UNROUTED_PROTECTED_PATH);
     }
 
     @Test
     void protectedPathWithGarbageTokenIsRejectedWith401ProblemJson() {
-        client.get().uri("/api/v1/events")
+        client.get().uri(UNROUTED_PROTECTED_PATH)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer not-a-jwt-at-all")
                 .exchange()
                 .expectStatus().isUnauthorized()
@@ -114,7 +122,7 @@ class AuthRouteSecurityTest {
 
     @Test
     void protectedPathWithTokenSignedByTheWrongSecretIsRejectedWith401() {
-        client.get().uri("/api/v1/events")
+        client.get().uri(UNROUTED_PROTECTED_PATH)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestJwt.signedWithWrongSecret())
                 .exchange()
                 .expectStatus().isUnauthorized()
@@ -123,7 +131,7 @@ class AuthRouteSecurityTest {
 
     @Test
     void protectedPathWithExpiredTokenIsRejectedWith401() {
-        client.get().uri("/api/v1/events")
+        client.get().uri(UNROUTED_PROTECTED_PATH)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestJwt.expired())
                 .exchange()
                 .expectStatus().isUnauthorized()
@@ -133,7 +141,7 @@ class AuthRouteSecurityTest {
     @Test
     void protectedPathWithTokenSignedUsingADifferentMacAlgorithmIsRejectedWith401() {
         // Right secret, wrong algorithm: the decoder is pinned to one MAC algorithm on purpose.
-        client.get().uri("/api/v1/events")
+        client.get().uri(UNROUTED_PROTECTED_PATH)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestJwt.signedWithHs256())
                 .exchange()
                 .expectStatus().isUnauthorized();
@@ -141,9 +149,11 @@ class AuthRouteSecurityTest {
 
     @Test
     void protectedPathWithValidTokenPassesTheEdge() {
-        // No route exists for /api/v1/events yet (Phase 5), so a 404 from the gateway itself is the
-        // expected outcome. What matters is that the token was accepted: not 401, not 403.
-        client.get().uri("/api/v1/events")
+        // No route exists for this path (and never will — it's a deliberately fake resource), so a
+        // 404 from the gateway itself is the expected outcome. What matters is that the token was
+        // accepted: not 401, not 403. (The former Phase 5 gap this test used to document — no route
+        // for /api/v1/events — is now fixed; see EventRouteTest for the real event route.)
+        client.get().uri(UNROUTED_PROTECTED_PATH)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestJwt.valid())
                 .exchange()
                 .expectStatus().isNotFound();

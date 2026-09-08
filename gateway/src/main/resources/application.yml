@@ -47,15 +47,71 @@ spring:
                   maxBackoff: 200ms
                   factor: 2
                   basedOnPreviousValue: false
-        # --- event (Phase 5), booking (Phase 7) -----------------------------------------------
-        # Added here later, same three filters, referencing the `default` resilience config below.
-        # payment and notification never get a route: they are Kafka-only by design.
+        # --- booking (Phase 7) ------------------------------------------------------------------
+        # Protected: no entry in SecurityConfig.PUBLIC_PATHS, so the deny-by-default rule requires
+        # a valid JWT for every /api/v1/bookings/** call (list/detail/hold). Same three filters and
+        # same rationale as auth's route above (CircuitBreaker outer, Retry inner, GET-only retry —
+        # POST /bookings/hold creates a seat hold and must never be replayed by the gateway).
+        - id: booking
+          uri: ${services.booking.uri}
+          predicates:
+            - Path=/api/v1/bookings/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: bookingCircuitBreaker
+                fallbackUri: forward:/fallback/booking
+            - name: Retry
+              args:
+                retries: 2
+                methods: GET
+                series: SERVER_ERROR
+                exceptions:
+                  - java.io.IOException
+                  - java.util.concurrent.TimeoutException
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 200ms
+                  factor: 2
+                  basedOnPreviousValue: false
+        # --- event (Phase 5, wired in during the Phase 7 gap-fix) ------------------------------
+        # Public: event's catalog reads (`GET /events`, `GET /events/{id}`, `GET /events/{id}/seats`)
+        # are unauthenticated per services/event/CLAUDE.md ("No security/JWT. The catalog reads are
+        # public.") and docs/user-flow.md screens 2-4 (browsing needs no login). Same two filters as
+        # auth/booking, but unlike booking every event endpoint is GET, so Retry applies uniformly —
+        # there is no unsafe POST on this route to exclude.
+        - id: event
+          uri: ${services.event.uri}
+          predicates:
+            - Path=/api/v1/events/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: eventCircuitBreaker
+                fallbackUri: forward:/fallback/event
+            - name: Retry
+              args:
+                retries: 2
+                methods: GET
+                series: SERVER_ERROR
+                exceptions:
+                  - java.io.IOException
+                  - java.util.concurrent.TimeoutException
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 200ms
+                  factor: 2
+                  basedOnPreviousValue: false
 
 # Downstream service locations. Externalized so tests can point them at a stub and Docker Compose
 # can point them at container hostnames without touching this file.
 services:
   auth:
     uri: ${SERVICE_AUTH_URI:http://localhost:8081}
+  booking:
+    uri: ${SERVICE_BOOKING_URI:http://localhost:8083}
+  event:
+    uri: ${SERVICE_EVENT_URI:http://localhost:8082}
 
 # Edge JWT validation. The secret is shared with the auth service (which signs with it); see
 # docs/adr/0002-hmac-shared-secret-jwt-validation.md. Same env var name on both sides, same
@@ -87,6 +143,10 @@ resilience4j:
     instances:
       authCircuitBreaker:
         baseConfig: default
+      bookingCircuitBreaker:
+        baseConfig: default
+      eventCircuitBreaker:
+        baseConfig: default
   timelimiter:
     configs:
       default:
@@ -94,6 +154,10 @@ resilience4j:
         cancelRunningFuture: true
     instances:
       authCircuitBreaker:
+        baseConfig: default
+      bookingCircuitBreaker:
+        baseConfig: default
+      eventCircuitBreaker:
         baseConfig: default
 
 management:
