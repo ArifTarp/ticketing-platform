@@ -69,4 +69,16 @@ public class SagaState {
     public Instant getUpdatedAt() {
         return updatedAt;
     }
+
+    /**
+     * Advances this saga's step/status in place (Phase 8: {@code CheckoutService},
+     * {@code SagaCompletionService}, {@code HoldExpirySweepService}). Used instead of
+     * insert-a-new-row for a bookingId that already has a {@code SagaState} (the
+     * {@code uq_saga_state_booking_id} constraint means there is at most one row per booking).
+     */
+    public void transitionTo(String step, String status) {
+        this.step = step;
+        this.status = status;
+        this.updatedAt = Instant.now();
+    }
 }

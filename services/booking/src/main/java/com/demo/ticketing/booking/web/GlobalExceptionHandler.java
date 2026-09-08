@@ -1,6 +1,7 @@
 package com.demo.ticketing.booking.web;
 
 import com.demo.ticketing.booking.application.exception.BookingNotFoundException;
+import com.demo.ticketing.booking.application.exception.BookingNotPendingException;
 import com.demo.ticketing.booking.application.exception.InvalidHoldRequestException;
 import com.demo.ticketing.booking.application.exception.SeatUnavailableException;
 import org.springframework.http.HttpStatus;
@@ -33,6 +34,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidHoldRequestException.class)
     public ResponseEntity<ProblemDetail> handleInvalidHoldRequest(InvalidHoldRequestException ex) {
         return problem(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    /** {@code POST /bookings/{id}/checkout} on a non-PENDING or already-expired booking. */
+    @ExceptionHandler(BookingNotPendingException.class)
+    public ResponseEntity<ProblemDetail> handleBookingNotPending(BookingNotPendingException ex) {
+        return problem(HttpStatus.CONFLICT, ex.getMessage());
     }
 
     /** Bean-validation failures on {@code @Valid @RequestBody} DTOs, e.g. {@code HoldBookingRequest}. */

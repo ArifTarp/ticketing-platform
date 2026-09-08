@@ -2,9 +2,11 @@ package com.demo.ticketing.booking.web;
 
 import com.demo.ticketing.booking.application.BookingHoldService;
 import com.demo.ticketing.booking.application.BookingService;
+import com.demo.ticketing.booking.application.CheckoutService;
 import com.demo.ticketing.booking.domain.BookingStatus;
 import com.demo.ticketing.booking.web.dto.BookingResponse;
 import com.demo.ticketing.booking.web.dto.HoldBookingRequest;
+import com.demo.ticketing.booking.web.dto.SeatAvailabilityResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,10 +35,14 @@ public class BookingController {
 
     private final BookingService bookingService;
     private final BookingHoldService bookingHoldService;
+    private final CheckoutService checkoutService;
 
-    public BookingController(BookingService bookingService, BookingHoldService bookingHoldService) {
+    public BookingController(BookingService bookingService,
+                              BookingHoldService bookingHoldService,
+                              CheckoutService checkoutService) {
         this.bookingService = bookingService;
         this.bookingHoldService = bookingHoldService;
+        this.checkoutService = checkoutService;
     }
 
     @GetMapping("/{id}")
@@ -65,5 +71,27 @@ public class BookingController {
     @PostMapping("/hold")
     public ResponseEntity<BookingResponse> holdSeats(@Valid @RequestBody HoldBookingRequest request) {
         return ResponseEntity.ok(bookingHoldService.holdSeats(request));
+    }
+
+    /**
+     * Kicks off the checkout saga (root CLAUDE.md step 2): publishes {@code PaymentRequested} to
+     * {@code payment.commands} after committing {@code SagaState}. Returns the booking's current
+     * (still {@code PENDING}) state -- the frontend polls {@code GET /bookings/{id}} for the
+     * eventual {@code CONFIRMED}/{@code CANCELLED} outcome, per business-rules.md.
+     */
+    @PostMapping("/{id}/checkout")
+    public ResponseEntity<BookingResponse> checkout(@PathVariable("id") Long id) {
+        return ResponseEntity.ok(checkoutService.checkout(id));
+    }
+
+    /**
+     * Live per-seat availability for one event (business-rules.md's "Seat map contract"): the
+     * frontend merges this with event's static seat-map layout. A seat absent from this list is
+     * implicitly {@code AVAILABLE}.
+     */
+    @GetMapping("/availability")
+    public ResponseEntity<List<SeatAvailabilityResponse>> getAvailability(
+            @RequestParam(name = "eventId") Long eventId) {
+        return ResponseEntity.ok(bookingService.getAvailability(eventId));
     }
 }

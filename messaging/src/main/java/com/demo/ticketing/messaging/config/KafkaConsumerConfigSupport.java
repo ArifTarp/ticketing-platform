@@ -30,7 +30,7 @@ import org.springframework.util.backoff.FixedBackOff;
  *       factory, passing its own dead-letter {@link KafkaOperations} (a plain
  *       {@code KafkaTemplate<Object, Object>} is sufficient since the DLT payload is only ever
  *       written, never consumed by a typed listener), and</li>
- *   <li>deduping on the payload's {@code eventId} field inside the listener method itself
+ *   <li>deduping on the payload's {@code messageId} field inside the listener method itself
  *       (idempotency store is service-specific business logic — Phase 7/8's job, not built
  *       here).</li>
  * </ul>

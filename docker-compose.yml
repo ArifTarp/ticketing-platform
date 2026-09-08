@@ -95,10 +95,35 @@ services:
       SPRING_DATASOURCE_PASSWORD: booking_app_pw
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  # Phase 8: mock payment provider. Kafka-only — no inbound REST, so no port is published for
+  # client access and it must never be added to the gateway's routes (see gateway/CLAUDE.md).
+  # Mirrors the booking block's build/env/depends_on style; the "8084:8084" mapping below only
+  # exists for local debugging/actuator access, not for gateway routing.
+  payment:
+    build:
+      context: ./services/payment
+      dockerfile: Dockerfile
+    container_name: ticketing-payment
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ticketing_payment
+      SPRING_DATASOURCE_USERNAME: payment_app
+      SPRING_DATASOURCE_PASSWORD: payment_app_pw
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
 
 volumes:

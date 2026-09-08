@@ -17,17 +17,21 @@ import java.util.UUID;
  * distinction later matters. This does not resolve the flagged gap (whether EXPIRED should be a
  * first-class event) — that decision is left to whoever picks it up, per the gap note.
  *
- * @param eventId     stable id for consumer dedupe.
- * @param bookingId   aggregate id / Kafka message key.
- * @param userId      needed by notification to address the recipient.
+ * @param messageId   synthetic dedup identifier for idempotent consumer processing — named
+ *                    {@code messageId} rather than {@code eventId} to avoid colliding with the
+ *                    domain concept "event" (a concert/show) used elsewhere in this codebase.
+ * @param bookingId   aggregate id / Kafka message key. {@code Long} to match booking's actual
+ *                    JPA entity id type ({@code Booking.id} is BIGSERIAL).
+ * @param userId      needed by notification to address the recipient. {@code Long} to match the
+ *                    originating Postgres BIGSERIAL column.
  * @param reason      why the booking was cancelled: {@code "PAYMENT_FAILED"} or
  *                    {@code "HOLD_EXPIRED"} — informational only, not a new topic/event type.
  * @param cancelledAt when booking committed the terminal status.
  */
 public record BookingCancelledEvent(
-        UUID eventId,
-        UUID bookingId,
-        UUID userId,
+        UUID messageId,
+        Long bookingId,
+        Long userId,
         String reason,
         Instant cancelledAt) {
 }

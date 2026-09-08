@@ -4,3 +4,32 @@ server:
 spring:
   application:
     name: payment-service
+  datasource:
+    # Least-privilege role, not the `ticketing` superuser (mirrors booking_app/event_app):
+    # payment_app can only CONNECT to ticketing_payment, so a mistyped url pointing at another
+    # service's database fails loudly instead of silently crossing a service boundary.
+    url: jdbc:postgresql://localhost:5432/ticketing_payment
+    username: payment_app
+    password: payment_app_pw
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Flyway owns the schema; validate catches entity/migration drift at startup.
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration
+  kafka:
+    # localhost default for running this module directly via Maven; docker-compose.yml's
+    # `payment` service overrides this via SPRING_KAFKA_BOOTSTRAP_SERVERS, mirroring the
+    # datasource pattern above (see services/booking/src/main/resources/application.yml).
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+payment:
+  mock:
+    fail-threshold: 500.00
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

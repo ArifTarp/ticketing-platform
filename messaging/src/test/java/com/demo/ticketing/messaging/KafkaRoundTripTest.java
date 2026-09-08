@@ -50,8 +50,8 @@ class KafkaRoundTripTest {
     void paymentRequestedCommandRoundTripsThroughEmbeddedKafka() {
         PaymentRequestedCommand sent = new PaymentRequestedCommand(
                 UUID.randomUUID(),
-                UUID.randomUUID(),
-                UUID.randomUUID(),
+                1L,
+                2L,
                 new BigDecimal("149.99"),
                 Instant.now().truncatedTo(ChronoUnit.MILLIS));
 
@@ -65,9 +65,9 @@ class KafkaRoundTripTest {
     void bookingConfirmedEventRoundTripsThroughEmbeddedKafka() {
         BookingConfirmedEvent sent = new BookingConfirmedEvent(
                 UUID.randomUUID(),
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                java.util.List.of(UUID.randomUUID(), UUID.randomUUID()),
+                1L,
+                2L,
+                java.util.List.of(10L, 11L),
                 Instant.now().truncatedTo(ChronoUnit.MILLIS));
 
         BookingConfirmedEvent received = sendAndReceive(

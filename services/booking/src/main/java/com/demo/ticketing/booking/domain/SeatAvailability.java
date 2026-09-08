@@ -83,4 +83,23 @@ public class SeatAvailability {
         this.status = SeatAvailabilityStatus.HELD;
         this.updatedAt = Instant.now();
     }
+
+    /**
+     * Transitions this row to {@link SeatAvailabilityStatus#SOLD} (Phase 8: payment completion).
+     * Terminal for the lifetime of this booking -- nothing in this service ever reverses a SOLD
+     * seat back to AVAILABLE/HELD.
+     */
+    public void markSold() {
+        this.status = SeatAvailabilityStatus.SOLD;
+        this.updatedAt = Instant.now();
+    }
+
+    /**
+     * Releases this seat back to {@link SeatAvailabilityStatus#AVAILABLE} (Phase 8: payment
+     * failure or hold-expiry sweep).
+     */
+    public void markAvailable() {
+        this.status = SeatAvailabilityStatus.AVAILABLE;
+        this.updatedAt = Instant.now();
+    }
 }
