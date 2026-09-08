@@ -75,5 +75,31 @@ services:
       timeout: 5s
       retries: 10
 
+  # Phase 7: bookings CRUD + Redis seat holds (no saga/Kafka wiring yet — that lands in Phase 8,
+  # see services/booking/CLAUDE.md). No app service is containerized here yet for any other
+  # backend module either, so this doesn't mirror an existing app-service block in this file;
+  # it follows the datasource-role/env-var conventions already established by
+  # infra/postgres/init-multi-db.sh and services/event's application.yml (Spring env vars
+  # override the same relaxed-binding properties for the containerized run, while the module's
+  # own application.yml keeps localhost defaults for running it directly via Maven).
+  booking:
+    build:
+      context: ./services/booking
+      dockerfile: Dockerfile
+    container_name: ticketing-booking
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ticketing_booking
+      SPRING_DATASOURCE_USERNAME: booking_app
+      SPRING_DATASOURCE_PASSWORD: booking_app_pw
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   postgres-data:

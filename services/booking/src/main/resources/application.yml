@@ -4,3 +4,31 @@ server:
 spring:
   application:
     name: booking-service
+  datasource:
+    # Least-privilege role, not the `ticketing` superuser (mirrors event_app in services/event):
+    # booking_app can only CONNECT to ticketing_booking, so a mistyped url pointing at another
+    # service's database fails loudly instead of silently crossing a service boundary.
+    url: jdbc:postgresql://localhost:5432/ticketing_booking
+    username: booking_app
+    password: booking_app_pw
+  data:
+    # Backs the seat-hold distributed lock (SeatHoldLockService) — host/port here are the
+    # localhost defaults for running this module directly via Maven; docker-compose.yml's
+    # `booking` service overrides these via SPRING_DATA_REDIS_HOST/PORT env vars, mirroring the
+    # datasource pattern above.
+    redis:
+      host: localhost
+      port: 6379
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Flyway owns the schema; validate catches entity/migration drift at startup.
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
