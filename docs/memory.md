@@ -28,35 +28,39 @@ was followed.
 
 ## Current state (as of 2026-09-08)
 
-**Phases 1–9 (backend) and Phase 10–11 (frontend) are complete.** Phase 3 (auth) landed in
-`7dff70f`, Phase 5 (event catalog) in `62091ee`, Phase 4 (gateway with JWT validation) in
-`8a47d93`, Phase 6 (Kafka topics & DTO scaffolding) in `d35012b`, Phase 7 (booking CRUD + Redis
-seat holds) in `abb2de4`, a gateway fix wiring up booking and event routes in `f7d9030`, Phase 8
-(payment mock + checkout saga wiring) in `d22d465`, and Phase 10 (frontend architecture review,
-advisory-only) fed directly into Phase 11 (frontend auth + event browsing, screens 1-3), which
-landed in `d78656c`.
+**Phases 1–9 (backend), Phase 10–12 (frontend), and a post-Phase-8/9/12 review-and-fix pass are all
+complete and committed.** Phase 3 (auth) landed in `7dff70f`, Phase 5 (event catalog) in `62091ee`,
+Phase 4 (gateway with JWT validation) in `8a47d93`, Phase 6 (Kafka topics & DTO scaffolding) in
+`d35012b`, Phase 7 (booking CRUD + Redis seat holds) in `abb2de4`, a gateway fix wiring up booking
+and event routes in `f7d9030`, Phase 8 (payment mock + checkout saga wiring) in `d22d465`, Phase 9
+(notification service) in `a0b1460`, Phase 10 (frontend architecture review, advisory-only) fed
+directly into Phase 11 (frontend auth + event browsing, screens 1-3) in `d78656c`, **Phase 12
+(frontend seat selection/checkout/confirmation, screens 4-6) in `3e85aab`**, and **a 4-agent
+review-and-fix pass across Phases 8/9/12 in `555c75f`** (real saga-idempotency and seat-hold bugs
+found and fixed — see entries below). Working tree is clean as of this log entry; nothing is
+sitting uncommitted.
 
-**Phase 9 (notification service) is functionally complete and verified (3/3 new
-`BookingEventListenerTest` cases green, combined `messaging`+`booking`+`payment`+`notification`
-module compile confirmed) but is sitting as uncommitted working-tree changes as of this log
-entry** — see the Phase 9 entry below for what's in it; whoever picks up the next session should
-commit it (or ask why it wasn't committed) before starting Phase 12. Per `docs/roadmap.md`, Phase
-9 is also the "backend vertical slice is now demoable via curl/Postman" checkpoint — a good place
-to pause and manually walk the full happy/force-fail/timeout paths before frontend work resumes.
-
-The Testcontainers/Docker blocker noted on 2026-09-07 remains **resolved** (native WSL2 Docker
-Engine, see "Environment" below). **Next: Phase 12 — Frontend seat-selection/checkout/confirmation**
-(the centerpiece), now fully unblocked on both the backend saga (Phase 8) and the notification leg
-(Phase 9). Phase 10's frontend-architecture recommendations already cover this phase's screens; no
-new architecture pass is expected to be needed, but worth a quick check before diving in since it's
-been a couple of phases since that review ran.
+**Open gap carried forward prominently: Playwright is not set up anywhere in this repo** — no
+config, no e2e test folder, despite `docs/roadmap.md` naming a full Playwright E2E suite (happy
+path, force-fail, TTL-expiry, two-tab seat race) as "the definition of done for the vertical slice"
+at both Phase 12's and Phase 13's verify steps. This was flagged by the frontend-architecture review
+as something to close as an explicit follow-up before/alongside Phase 13, not silently deferred
+again. **Next: Phase 13 — `/tickets` (my bookings list + client-side QR, no new backend work)**,
+with the Playwright gap needing a decision (scaffold now vs. explicitly re-defer) since Phase 13's
+own verify step in the roadmap also assumes Playwright already exists.
 
 Local toolchain is installed and working on this machine (see "Environment" below) — a fresh
 session does not need to reinstall anything, just re-verify with the commands in that section. One
-new environment fact from this session: **port 8080 on this machine is occupied by a pre-existing,
-unrelated Windows `Tomcat10.exe` service**, so the gateway cannot bind its documented default port
-here — see the Phase 11 entry below before assuming `docker-compose`'s default gateway config will
-just work on this machine.
+environment fact from Phase 11 still applies: **port 8080 on this machine is occupied by a
+pre-existing, unrelated Windows `Tomcat10.exe` service**, so the gateway cannot bind its documented
+default port here — see the Phase 11 entry below before assuming `docker-compose`'s default gateway
+config will just work on this machine.
+
+Also still open, not yet resolved by any agent: a suspicious file `frontend/AGENTS.md` was found
+during the Phase 8/9/12 review pass containing what looks like a planted prompt-injection payload
+(instructs readers to consult `node_modules/next/dist/docs/`, falsely claims to be auto-regenerated
+by `next dev`). It has been reported to the user directly, not fixed or deleted by any agent — still
+present as of this log entry and needs a human decision on whether to remove it.
 
 ## What's done
 
@@ -361,11 +365,8 @@ plumbing in anger.
 
 ### Phase 8 — Payment mock + checkout saga wiring (2026-09-08)
 
-**Not yet committed** — this entire phase exists as uncommitted working-tree changes (modified
-files across `messaging`, `services/booking`, `services/payment`, plus new untracked files and a
-`docker-compose.yml` edit). Verified green as a combined build (`./mvnw -pl
-messaging,services/payment,services/booking -am test`, ~4m52s, `BUILD SUCCESS`) but flagged here so
-a future session doesn't assume `git log` reflects the true state of the code on disk.
+Committed as `d22d465`. Verified green as a combined build (`./mvnw -pl
+messaging,services/payment,services/booking -am test`, ~4m52s, `BUILD SUCCESS`).
 
 - **Pre-implementation decision, agreed with the user before any code was written**: the "publish
   only after the local DB commit" / outbox rule from root `CLAUDE.md` is satisfied via
@@ -478,13 +479,12 @@ a future session doesn't assume `git log` reflects the true state of the code on
   test` together (not each module in isolation, since 4 different agents touched overlapping
   shared code across this phase) — `BUILD SUCCESS`, messaging 2/2, payment 5/5, booking's full
   suite green, ~4m52s total.
-- No commit yet — see "Current state" above.
+- Commit: `d22d465`.
 
 ### Phase 9 — Notification service (2026-09-08)
 
-**Not yet committed** — exists as uncommitted working-tree changes (`services/notification` was
-an empty skeleton going into this phase; `docker-compose.yml` also modified). Built by
-`message-broker`.
+Committed as `a0b1460` (`services/notification` was an empty skeleton going into this phase;
+`docker-compose.yml` also modified). Built by `message-broker`.
 
 - Pure `booking.events` consumer, no inbound REST and no gateway route — same Kafka-only shape as
   `payment`, by design (mirrors the existing precedent, not a new decision).
@@ -509,7 +509,7 @@ an empty skeleton going into this phase; `docker-compose.yml` also modified). Bu
   together (not notification in isolation) succeeds, consistent with Phase 8's practice of
   checking cross-module compatibility whenever multiple phases' code shares the `messaging`
   module's contracts.
-- No commit yet — see "Current state" above.
+- Commit: `a0b1460`.
 
 ### Phase 10 — Frontend architecture pass
 
@@ -563,6 +563,61 @@ an empty skeleton going into this phase; `docker-compose.yml` also modified). Bu
   data-fetching library (React Query, SWR) gets adopted for Phase 12's polling-heavy screens, at
   which point the pattern this rule warns about goes away naturally.
 - Commit: `d78656c`.
+
+### Phase 12 — Frontend: seat selection, checkout, confirmation (2026-09-08)
+
+- Built screens 4-6: `/events/[eventId]/seats` (seat map merging event's static layout with
+  booking's live availability client-side per the Phase 1 contract, batched hold requests, 409
+  handling), `/checkout/[bookingId]` (mock payment form, polls `GET /bookings/{id}` until
+  terminal), `/checkout/[bookingId]/confirm` (CONFIRMED/CANCELLED/EXPIRED views with a retry link).
+  New hooks `useCountdown`, `useSeatSelection`, `useBookingPolling` — built per Phase 10's
+  recommendations (plain React state, no Redux/SWR/React Query), not re-derived from scratch.
+- 46/46 Vitest tests green, `pnpm build`/`pnpm lint` both clean.
+- **Open gap, flagged prominently rather than silently deferred again**: Playwright is **not** set
+  up anywhere in this repo — no config file, no e2e test folder — despite `docs/roadmap.md`'s Phase
+  12 verify step naming a full Playwright E2E suite (happy path, force-fail, TTL-expiry, two-tab
+  seat race) as "the definition of done for the vertical slice." The frontend-architecture review
+  recommended scaffolding it as an explicit follow-up before or alongside Phase 13, not deferring it
+  further without a decision.
+- Commit: `3e85aab`.
+
+### Post-Phase-8/9/12 review pass + fixes (2026-09-08)
+
+A 4-agent review pass (`code-reviewer`, `domain-review`, `backend-architecture`,
+`frontend-architecture`) ran against commits `d22d465`/`a0b1460`/`3e85aab` and found real bugs, all
+fixed in this pass. Two new ADRs came out of it: `docs/adr/0004-incremental-seat-holds-append-to-
+pending-booking.md` and `docs/adr/0005-kafka-consumer-idempotency-and-multitype-topic-
+conventions.md` (the latter now codifies the pattern first established ad hoc in Phase 8).
+
+- **`BookingHoldService`** now appends to an existing `PENDING` booking per `(userId, eventId)`
+  instead of always creating a new one on every hold call (ADR-0004). This wasn't just a data-model
+  tidiness fix — it also repairs the seat-race demo path, since seats are genuinely locked per-click
+  again instead of each click silently starting a parallel booking.
+- **`CheckoutService.checkout()`** is now idempotent on retry: it recognizes an already-in-flight
+  `SagaState` for the booking instead of republishing a second `PaymentRequestedCommand`.
+- **payment and notification both had the same claim-then-fail bug**: the idempotency claim row was
+  committed *before* the actual business work ran, so a mid-work failure left a message permanently
+  marked "processed" with nothing actually done or published — a silent data-loss bug, not just a
+  theoretical one. Restructured to claim-**after**-work instead (a small accepted race window is
+  documented directly in the code, preferred over the original bug). `payments.booking_id` also got
+  its missing `UNIQUE` constraint via a new `V2` migration.
+- **`SagaCompletionService`'s** idempotency check was retrofitted from a Postgres-unsafe
+  same-transaction check-then-insert pattern to the canonical `REQUIRES_NEW`-claim pattern (now
+  written down as ADR-0005, closing the "no documented dedup-store shape" gap flagged all the way
+  back in the Phase 6 review).
+- **Frontend**: the checkout screen now calls `checkout()` itself as a fallback, so direct/bookmarked
+  navigation to `/checkout/[bookingId]` still triggers payment instead of polling forever on a
+  booking that never got checked out; the seat map is now locked (non-clickable) once a hold
+  succeeds, so the displayed selection can no longer diverge from what was actually paid for.
+- **Verification**: booking 25/25, payment+notification combined-module `BUILD SUCCESS`, frontend
+  46/46 + `pnpm build`/`pnpm lint` clean, and a final combined `messaging`+`booking`+`payment`+
+  `notification` module test run also green.
+- **Also flagged, not fixed by any agent**: a suspicious file `frontend/AGENTS.md` was found during
+  this review containing what looks like a planted prompt-injection payload — it instructs readers
+  to consult `node_modules/next/dist/docs/` and falsely claims to be auto-regenerated by `next dev`.
+  Reported directly to the user rather than deleted/edited by an agent; it is still present as of
+  this log entry and needs a human decision on whether to remove it.
+- Commit: `555c75f`.
 
 ## Environment (this machine)
 
@@ -640,35 +695,28 @@ reinstall, unless one of these checks fails:
     green multi-module run: `./mvnw -pl gateway,services/auth,services/event test` → 42/42 tests,
     `BUILD SUCCESS`.
 
-## Next up: Phase 12 — Frontend seat selection, checkout, confirmation (the centerpiece)
+## Next up: Phase 13 — `/tickets` (my bookings list + client-side QR)
 
-**Before anything else: commit Phase 9's working-tree changes** (see "Current state" above) — a
-future session should not start Phase 12 on top of an uncommitted Phase 9 without first checking
-why it wasn't committed and getting it landed. (Phase 8 hit the same situation last session and was
-committed as `d22d465` before Phase 9 started — follow the same pattern here.)
+Per `docs/roadmap.md`, Phase 13 is a frontend-only phase: no new backend work is required, it reads
+from the existing `GET /api/v1/bookings?userId=` endpoint (Phase 7) and generates a QR code
+client-side. **Agents:** `frontend`.
 
-Per `docs/roadmap.md`: `/events/[eventId]/seats` (seat map, hold click, countdown, disabled
-HELD/SOLD, 409 handling — demoable live in two browser tabs), `/checkout/[bookingId]` (mock payment
-form, poll `GET /bookings/{id}` until terminal), `/checkout/[bookingId]/confirm`
-(CONFIRMED/CANCELLED-EXPIRED views with retry link). **Agents:** `frontend`; `figma-screen-design`
-only if the seat-map/countdown UI needs more detail than Phase 1's wireframes already provide.
-
-This phase is now fully unblocked: Phase 8 shipped `POST /bookings/{id}/checkout` and
-`GET /bookings/availability?eventId=`, and Phase 9 closed the loop with the notification leg of the
-saga, satisfying the roadmap's sequencing note that Phase 12 should wait for Phase 9 so the full
-saga is in place before Playwright exercises it end to end.
+**Before or alongside Phase 13, close the Playwright gap** — it does not exist anywhere in this
+repo yet (no config, no e2e folder), even though `docs/roadmap.md` names a full Playwright E2E
+suite (happy path, force-fail payment, short-TTL expiry, two-tab seat race) as "the definition of
+done for the vertical slice" at Phase 12's verify step, and Phase 13's own verify step in the
+roadmap likewise assumes Playwright already exists. This was flagged by the frontend-architecture
+review during the Phase 8/9/12 review pass as something to scaffold as an explicit follow-up, not
+silently deferred again — whoever picks up Phase 13 should either scaffold it first or make an
+explicit, logged decision to defer it further (not just proceed as if it isn't a gap).
 
 Preconditions/reminders for whoever picks this up:
-- Phase 10's recommendations already cover this phase's hooks (`useCountdown`, `useBookingPolling`,
-  `useSeatSelection`) and state-management approach (plain React state, no Redux/SWR/React Query) —
-  reuse those, don't re-derive.
-- `fetchMyBookings()`/any `userId`-scoped call still needs the JWT `sub` claim decoded client-side
-  (booking doesn't parse JWTs itself, `userId` is a plain query param) — same gap Phase 10 flagged.
-- **Verify:** Playwright E2E covering all four scenarios against the full compose stack — happy
-  path, force-fail payment, short-TTL expiry, two-tab seat race. Per the roadmap this suite is the
-  definition of "done" for the vertical slice.
+- `fetchMyBookings()` still needs the JWT `sub` claim decoded client-side (booking doesn't parse
+  JWTs itself, `userId` is a plain query param) — same gap Phase 10 flagged, still open.
 - Remember this machine's port-8080 conflict (pre-existing Windows `Tomcat10.exe`) if running the
   full stack via `docker-compose` locally — see the Phase 11 entry above.
+- The `frontend/AGENTS.md` suspicious file (see the Phase 8/9/12 review-pass entry above) is still
+  present and unresolved — worth a human decision before it's forgotten further.
 
 **Carried-forward, lower priority, unresolved from earlier phases**:
 - The price-is-client-supplied gap from Phase 7 (`HoldSeatRequest.price` is caller-supplied, not
