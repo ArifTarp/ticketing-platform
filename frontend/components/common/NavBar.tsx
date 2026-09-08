@@ -18,6 +18,9 @@ export function NavBar() {
           </Link>
           {isAuthenticated ? (
             <>
+              <Link href="/tickets" className="text-zinc-600 hover:text-zinc-900">
+                My tickets
+              </Link>
               <span className="text-zinc-500">{user?.email}</span>
               <button
                 type="button"
