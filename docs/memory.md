@@ -26,19 +26,31 @@ subagent's context open after "done" in a way that invites it to take further ac
 verify after the fact that nothing was committed without sign-off, not just trust the instruction
 was followed.
 
-## Current state (as of 2026-09-07)
+## Current state (as of 2026-09-08)
 
-**Phases 1–6 are complete and committed.** Phase 3 (auth) landed in `7dff70f`, Phase 5 (event
-catalog) in `62091ee`, Phase 4 (gateway with JWT validation) in `8a47d93` — Phase 5 and Phase 4
-were built in parallel this session and both are done, so despite the numbering, Phase 4 landed
-chronologically after Phase 5 — and Phase 6 (Kafka topics & DTO scaffolding) in `d35012b`. The
-Testcontainers/Docker blocker noted below on 2026-09-07 is now **resolved** (native WSL2 Docker
-Engine, see "Environment" below) — `AuthControllerTest` and the full multi-module suite both run
-and pass. **Next: Phase 7 — Booking service (CRUD + Redis seat holds, no saga yet — the seat-race
-concurrency logic)** per `docs/roadmap.md`.
+**Phases 1–7 (backend) and Phase 10–11 (frontend) are complete and committed.** Phase 3 (auth)
+landed in `7dff70f`, Phase 5 (event catalog) in `62091ee`, Phase 4 (gateway with JWT validation) in
+`8a47d93`, Phase 6 (Kafka topics & DTO scaffolding) in `d35012b`. In this session: Phase 7 (booking
+CRUD + Redis seat holds) landed in `abb2de4`, a gateway fix wiring up both the booking and the
+previously-unrouted event service landed in `f7d9030`, and Phase 10 (frontend architecture review,
+advisory-only) fed directly into Phase 11 (frontend auth + event browsing, screens 1-3), which
+landed in `d78656c`. A 3-agent review pass also audited Phase 6's `messaging` module this session
+(see the new "Phase 6 review pass" entry below) — findings recorded, **none fixed yet**, deferred
+to Phase 8.
+
+The Testcontainers/Docker blocker noted on 2026-09-07 remains **resolved** (native WSL2 Docker
+Engine, see "Environment" below). **Next: Phase 8 — Payment mock + checkout saga wiring**, which
+should also pick up the Phase 6 review findings (force-fail flag field, DLT topic bootstrap,
+dedup-store convention) rather than let them linger further. Phase 12 (frontend seat-selection/
+checkout/confirmation, the centerpiece) is blocked on Phase 8's checkout/hold-release endpoints and
+booking's still-missing `GET /api/v1/bookings/availability?eventId=`.
 
 Local toolchain is installed and working on this machine (see "Environment" below) — a fresh
-session does not need to reinstall anything, just re-verify with the commands in that section.
+session does not need to reinstall anything, just re-verify with the commands in that section. One
+new environment fact from this session: **port 8080 on this machine is occupied by a pre-existing,
+unrelated Windows `Tomcat10.exe` service**, so the gateway cannot bind its documented default port
+here — see the Phase 11 entry below before assuming `docker-compose`'s default gateway config will
+just work on this machine.
 
 ## What's done
 
@@ -248,6 +260,152 @@ Phase 2 scaffold and found 6 issues, all fixed in `ca5b9e3`:**
   7/8/9: the wire contracts exist and are tested, but zero business logic consumes them yet.
 - Commit: `d35012b`.
 
+### Phase 6 review pass — `messaging` module audit (2026-09-08)
+
+Phase 6 (commit `d35012b`) had not previously gone through the project's review agents. This
+session ran a 3-agent parallel review (`code-reviewer`, `domain-review`, `backend-architecture`)
+against the `messaging` module before Phase 7 started building on top of it. **All findings below
+are recorded only — none have been fixed yet.** They're deferred to be picked up before or during
+Phase 8 (saga wiring), which is the next phase that actually exercises this module's Kafka
+plumbing in anger.
+
+- **`code-reviewer` (high severity)**: `KafkaJsonSupport.objectMapper()` is dead code — unreachable
+  from the shipped producer/consumer factories, so it's a documentation trap (reads as "this is the
+  configured ObjectMapper" but nothing wires it in) rather than a functional bug, since Spring's own
+  default `ObjectMapper` already has `FAIL_ON_UNKNOWN_PROPERTIES` disabled. Also: the DLQ path
+  (`DeadLetterPublishingRecoverer`) has **zero test coverage**; `KafkaRoundTripTest` bypasses the
+  module's own production support classes entirely (hand-rolled serializer config instead of
+  `KafkaProducerFactorySupport`/`KafkaConsumerConfigSupport`), so it doesn't actually prove the
+  shipped factories work; `.DLT` topics are not provisioned in `infra/kafka/create-topics.sh` and
+  rely on broker auto-create instead. Medium severity: only 2 of the 5 DTOs have round-trip test
+  coverage.
+- **`domain-review`**: `PaymentRequestedCommand` has no field for `business-rules.md`'s "force fail"
+  test flag (business-rules.md line ~89: payment fails via threshold or "a 'force fail' test flag on
+  the request") — **this will block Phase 8** unless the field is added, since there's currently no
+  way for booking to ask payment to demo the failure path on demand. All five DTOs' dedup field is
+  named `eventId`, which collides with the domain's established meaning of "eventId" = the
+  concert/show being ticketed — a naming-clarity risk (not a bug today, since no code has actually
+  gotten confused by it yet), suggested rename to `messageId`. Same DLT-topic-bootstrap gap as
+  `code-reviewer` found independently. Also: the DLQ topic-naming convention (`<topic>.DLT`) was
+  decided in code (`KafkaConsumerConfigSupport`), but `business-rules.md`'s "Flagged gaps" section
+  (line ~196) still lists it as an open question — the doc needs updating to point at the decision
+  now that it exists, not left implying it's unresolved.
+- **`backend-architecture`**: verdict **"architecturally sound, no blockers before Phase 7"** — this
+  is why Phase 7 was allowed to proceed without waiting on fixes. Two items flagged as needing
+  resolution **before Phase 8** specifically (not before Phase 7): the same DLT-topic-bootstrap gap,
+  and the lack of any documented convention for the per-service idempotency/dedup store's shape —
+  without one, there's a real risk of three independently-diverging implementations landing across
+  booking/payment/notification in Phases 7/8/9 as each service's agent invents its own.
+
+### Phase 7 — Booking service: CRUD + Redis seat holds (no saga yet)
+
+- Built `services/booking/`: Flyway schema for `bookings`/`booking_items`/`seat_availability`/
+  `saga_state`; entities/repositories/mapper; read endpoints `GET /api/v1/bookings/{id}` and
+  `GET /api/v1/bookings?userId=&status=`. Datasource uses the least-privilege `booking_app`
+  Postgres role (Phase 2 fix #2). `docker-compose.yml` gained a `booking` app container (port 8083)
+  and a `redis` container. Split across two agent passes per the roadmap: `backend-service` did the
+  plain CRUD/entity layer, `saga-orchestrator` did the concurrency-sensitive hold/lock mechanism.
+- **The centerpiece of this phase**: `POST /api/v1/bookings/hold`, backed by `SeatHoldLockService`
+  — an atomic Redis `SET booking:seat-hold:{eventId}:{seatId} {token} NX EX 600` (10-minute TTL) via
+  `StringRedisTemplate.setIfAbsent`, so the Redis key **is** the hold, not a separate short-lived
+  mutex plus a long-lived marker. The losing side of a race gets an immediate `false` from `SETNX`
+  and a 409 — no DB round-trip, no unique-constraint race. Proven by `SeatHoldConcurrencyTest`: two
+  concurrent clients race a `CountDownLatch` starting gate on the same seat across 25 distinct seats
+  per run, asserting exactly one 200/one 409 plus a durable-state check (one `HELD` row, one
+  `booking_items` row) every time. Run independently 4 times during this pass (100 total race
+  iterations across process/container restarts), zero flakes. 19/19 booking tests green overall.
+- **Known gap, documented in `services/booking/CLAUDE.md`, deferred to Phase 8**: price is
+  client-supplied on the hold request (`HoldSeatRequest.price`) rather than fetched from event,
+  because neither a Kafka pricing topic nor a sanctioned gateway-composed read exists yet for
+  seat/price data — `business-rules.md`'s "Seat map contract" explicitly forbids a gateway-composed
+  merge endpoint for this. This is a documented demo-scope simplification (mirrors the existing
+  `userId` JWT-deferral precedent), not a security decision: a caller could in principle supply an
+  arbitrary price today. Flagged for `workflow-rules`/`backend-architecture` — the real fix is most
+  likely a Kafka-published price-tier snapshot event.
+- **Known gap, deferred to Phase 8**: no timeout sweep exists yet, so a hold whose Redis TTL expires
+  leaves the `SeatAvailability` row stuck `HELD` forever (nothing resets it to `AVAILABLE`) — a new
+  hold request for that seat would acquire the now-free Redis key but get rejected anyway by
+  `BookingHoldService`'s defensive DB re-check. This is exactly `docs/roadmap.md` Phase 8's
+  "hold-expiry edge path"; the sweep is what closes it, not a change to the DB check.
+- **Also not yet built** (explicitly out of scope for this phase, not an oversight):
+  `GET /api/v1/bookings/availability?eventId=` (the live-availability read the frontend needs to
+  merge with event's seat-map layout — schema/repository support already exists via
+  `SeatAvailabilityRepository.findByEventId`, just no endpoint yet), `POST /bookings/{id}/checkout`,
+  any Kafka producer/consumer code in booking, and JWT validation (`userId` stays a plain query
+  param, same precedent as event's Phase 5 deferral).
+- No `Dockerfile` exists yet for booking (or any other service) — `docker-compose.yml`'s `booking`
+  build context expects one; this is a repo-wide pre-existing gap, not new to this phase.
+- Commit: `abb2de4`.
+
+### Gateway fix — booking + event routes wired up
+
+- Found and fixed during Phase 7 work: the `event` service (built in Phase 5) had never actually
+  been wired into the gateway's routes — a Phase 5 gap (the gateway CLAUDE.md's route table simply
+  never got an `/api/v1/events/**` entry) that would have silently blocked all frontend
+  event-browsing calls once frontend work started. Added `/api/v1/events/**` (public, GET-only so
+  Retry applies uniformly, matching circuit breaker) alongside the new `/api/v1/bookings/**` route
+  (JWT-protected, GET-only retry — POSTs like `/bookings/hold` are never retried, same rationale as
+  the existing auth-route POST exclusion). Both verified live: 25/25 gateway tests green, plus a
+  live curl verification carried out again during the later Phase 11 frontend work.
+- **Flagged, not fixed**: a latent shared-`MockWebServer`-state test isolation issue was found and
+  fixed in the new `EventRouteTest` but left unfixed in the pre-existing `BookingRouteTest` — not
+  currently causing failures since JUnit's method execution order happens to avoid triggering it,
+  but worth a follow-up cleanup so it doesn't become a flaky-test surprise later.
+- Commit: `f7d9030`.
+
+### Phase 10 — Frontend architecture pass
+
+- Advisory-only review by `frontend-architecture`, no code produced. Confirmed `docs/user-flow.md`
+  already has implementation-ready wireframe detail for all 8 screens (from Phase 1), so no design
+  gap needed filling before frontend coding started.
+- Recommended and adopted for Phase 11: plain React state + small custom hooks (no Redux/SWR/React
+  Query — judged unnecessary overhead for a demo-scale app), App Router structure using `(auth)`/
+  `(app)` route groups, `useCountdown`/`useBookingPolling`/`useSeatSelection` hooks (the latter two
+  land in Phase 12), JWT held in `localStorage` via a root `SessionProvider` context, and a shared
+  `apiClient.ts` wrapping `fetch` with RFC 7807 error parsing so every API call gets consistent
+  error handling for free.
+- **Flagged a real integration gap for Phase 12/13**: `fetchMyBookings()` will need to decode the
+  JWT's `sub` claim client-side before calling `GET /api/v1/bookings?userId=`, because booking
+  (Phase 7, see above) doesn't parse JWTs itself — `userId` is a plain numeric query param, not the
+  literal string `"me"` the roadmap's phase description implies. This is consistent with
+  `services/booking/CLAUDE.md`'s own "`userId=me` note".
+- No commit (advisory pass, folded directly into Phase 11's implementation).
+
+### Phase 11 — Frontend: auth + event browsing (screens 1-3)
+
+- Scaffolded the Next.js app from scratch — `frontend/` did not exist before this session despite
+  being listed in root `CLAUDE.md`'s repo layout and the roadmap. App Router, TypeScript, Tailwind
+  v4, pnpm, Next 16.3.4 / React 19. Built `/login`, `/register`, `/events`, `/events/[eventId]`, a
+  root `SessionProvider`, `apiClient.ts`, `authApi.ts`, `eventApi.ts`, and the matching component
+  tree (`AuthLayout`, `LoginForm`, `RegisterForm`, `EventCard`, `EventList`, `EventFilterBar`,
+  `PriceTierList`, `SelectSeatsButton`, etc.) per Phase 10's recommendations.
+- 20/20 Vitest unit tests green (API client, auth API, event API, JWT decode helper), `pnpm build`
+  and `pnpm lint` both clean, and the whole flow was live-verified end-to-end against the real
+  running auth + event + gateway services (register, login, duplicate-register 409, list, detail,
+  404-for-missing-event all matched expected responses) — not just unit-tested in isolation.
+- **Local toolchain notes for this machine** (also relevant to
+  `ticketing_local_toolchain.md`, the separate local-toolchain memory file this agent doesn't own —
+  flagging here for whoever maintains it): `pnpm` had to be installed globally
+  (`npm install -g pnpm`, wasn't present before this session); `vitest@5`/`jsdom@30` (the current
+  latest at time of scaffolding) were incompatible with this machine's Node 20.12.1/Windows setup,
+  so both were pinned down — `vitest@3.2.7` + `jsdom@25.0.1` — with the Vitest config file named
+  `vitest.config.mts` (not `.ts`) for correct ESM/Vite 7 interop.
+- **Environment note, likely to recur**: on this machine, TCP port 8080 is occupied by a
+  pre-existing Windows `Tomcat10.exe` service unrelated to this project (not started by any agent
+  this session or previously) — the gateway could not bind its documented default port (`8080`,
+  per root `CLAUDE.md`'s ports table) during live verification. Worked around by starting the
+  gateway with `--server.port=8090` for testing rather than touching the system Tomcat service. This
+  will block running the full stack via `docker-compose`/default config on this machine until a
+  human resolves the port conflict (stop/reconfigure the Tomcat service, or remap the gateway's
+  compose port) — flagging prominently since it will recur every time someone tries to run the
+  gateway locally on 8080 here, not just this session.
+- **Deviation from Next.js defaults**: disabled ESLint's `react-hooks/set-state-in-effect` rule
+  (new in Next 16's default config) because it flags the standard `useEffect`-based data-fetching
+  pattern used throughout screens 2-3. Flagged for `frontend-architecture` to revisit if/when a
+  data-fetching library (React Query, SWR) gets adopted for Phase 12's polling-heavy screens, at
+  which point the pattern this rule warns about goes away naturally.
+- Commit: `d78656c`.
+
 ## Environment (this machine)
 
 Installed and verified working during Phase 2 — a fresh session should just re-verify, not
@@ -324,33 +482,48 @@ reinstall, unless one of these checks fails:
     green multi-module run: `./mvnw -pl gateway,services/auth,services/event test` → 42/42 tests,
     `BUILD SUCCESS`.
 
-## Next up: Phase 7 — Booking service: CRUD + Redis seat holds (no saga yet)
+## Next up: Phase 8 — Payment mock + checkout saga wiring
 
-Per `docs/roadmap.md`: build `services/booking/` — `bookings`/`booking_items`/`seat_availability`/
-`saga_state` + Flyway (datasource must use the least-privilege `booking_app` Postgres role, per
-the Phase 2 fix, not the superuser). Endpoints: `POST /bookings/hold`, `GET /bookings/{id}`,
-`GET /bookings?userId=me&status=`. Business rules to enforce: max 6 seats per booking, price
-snapshotted at hold time (not looked up live at confirm time).
+Per `docs/roadmap.md`: payment gets a `payments` table, consumes `PaymentRequested`, publishes
+`PaymentCompleted`/`PaymentFailed` (default success; force-fail flag/threshold makes the failure
+path demoable on demand). Booking gets `POST /bookings/{id}/checkout` (publishes
+`PaymentRequested`), an idempotent `payment.events` consumer that updates `SagaState`, marks seats
+`SOLD`/released, flips `Booking.status` to `CONFIRMED`/`CANCELLED`, and publishes `booking.events`
+via the outbox pattern; plus the DLQ path. The two edge paths that must ship here, not just the
+happy path: **payment-fails** (force-fail → `PaymentFailed` → booking `CANCELLED`, seats released)
+and **hold-expiry** (a scheduled sweep on `expires_at`, independent of the payment path — test with
+a short TTL override, don't wait 10 real minutes; this is also what closes Phase 7's "stuck `HELD`
+row" gap, see above). Verify: three automated Testcontainers scenarios (happy/force-fail/timeout)
+plus Phase 7's race test still green.
 
-**The seat-race concurrency logic is the centerpiece of this phase**: a Redis distributed lock
-per `eventId:seatId`, 10-minute TTL, must resolve two concurrent hold requests on the same seat to
-exactly one 200 and one immediate 409 — via the Redis lock, not a DB unique-constraint race. This
-must be proven with an automated Testcontainers test racing two concurrent clients on the same
-seat, not just described in prose or manually spot-checked; the roadmap explicitly calls out that
-this test must pass reliably (not flaky).
+**Should fold in the unresolved Phase 6 review findings (see "Phase 6 review pass" above) as part
+of or before this work, not as an afterthought**:
+1. Add a force-fail field to `PaymentRequestedCommand` — payment's mock logic in this phase
+   literally cannot demo the failure path on demand without it, so this isn't optional polish.
+2. Bootstrap `.DLT` topics explicitly in `infra/kafka/create-topics.sh` rather than relying on
+   broker auto-create, before any consumer in this phase actually needs its DLQ path exercised.
+3. Decide and document a shared idempotency/dedup store convention before booking, payment, and
+   notification (Phase 9) each invent their own independently.
+4. Update `business-rules.md`'s "Flagged gaps" section to reflect that the DLQ topic-naming
+   convention (`<topic>.DLT`) is now decided (not still open), and consider the `eventId`→
+   `messageId` DTO field rename `domain-review` flagged to avoid colliding with "eventId" =
+   the concert/show elsewhere in the domain.
+5. The DLQ path and 3 of 5 DTOs still have zero round-trip test coverage — worth closing before
+   trusting the DLQ in a real failure-path test.
 
-The `messaging` module's DTOs (Phase 6, commit `d35012b`) are now available as a dependency, but
-Phase 7 itself does not need Kafka — booking only starts publishing/consuming (`PaymentRequested`,
-`PaymentCompleted`/`Failed`, `booking.events`) in Phase 8's saga wiring. Don't reach for Kafka
-here.
+**Also still open from Phase 7, needed by this phase's checkout flow**: the
+`GET /api/v1/bookings/availability?eventId=` endpoint doesn't exist yet (schema/repository support
+does), and the price-is-client-supplied gap (see Phase 7 entry above) is unresolved — worth a
+`workflow-rules`/`backend-architecture` decision before or during this phase rather than after.
 
-**Carried-forward open item, worth resolving before or during this phase rather than letting it
-linger further**: Phase 5's event-catalog modeling decision — price tiers attach to seats by venue
-**section**, not per-seat (`UNIQUE(event_id, section)` on `seat_categories`) — is still unratified
-by `workflow-rules`. Phase 7's booking logic will read seat/price data shaped by that decision
-(price snapshotting at hold time reads from event's per-section pricing), so it's worth getting
-`workflow-rules` sign-off now rather than building booking's price-snapshot logic on top of an
-unratified model and having to revisit it later.
+**Carried-forward, lower priority**: Phase 5's event-catalog modeling decision — price tiers attach
+to seats by venue **section**, not per-seat (`UNIQUE(event_id, section)` on `seat_categories`) — is
+still unratified by `workflow-rules`.
 
-Agents per the roadmap: `saga-orchestrator` (owns booking's concurrency-sensitive lock code),
-`backend-service` (plain CRUD/entities), `gateway-resilience` (route).
+Agents per the roadmap: `saga-orchestrator` (booking-side: consumers, `SagaState`, outbox, sweep,
+DLQ), `backend-service` (payment CRUD/mock logic), `message-broker` (if a DTO/DLQ gap surfaces —
+likely, given the findings above), `gateway-resilience` (route).
+
+**Frontend note**: Phase 12 (seat-selection/checkout/confirmation, the centerpiece) is the next
+unstarted frontend phase and is blocked on this phase's checkout/hold-release endpoints plus the
+still-missing booking `availability` endpoint — don't start Phase 12 before those exist.
