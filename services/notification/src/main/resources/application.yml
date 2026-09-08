@@ -4,3 +4,29 @@ server:
 spring:
   application:
     name: notification-service
+  datasource:
+    # Least-privilege role, not the `ticketing` superuser (mirrors booking_app/event_app/
+    # payment_app): notification_app can only CONNECT to ticketing_notification, so a
+    # mistyped url pointing at another service's database fails loudly instead of silently
+    # crossing a service boundary.
+    url: jdbc:postgresql://localhost:5432/ticketing_notification
+    username: notification_app
+    password: notification_app_pw
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Flyway owns the schema; validate catches entity/migration drift at startup.
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration
+  kafka:
+    # localhost default for running this module directly via Maven; docker-compose.yml's
+    # `notification` service overrides this via SPRING_KAFKA_BOOTSTRAP_SERVERS, mirroring the
+    # datasource pattern above (see services/payment/src/main/resources/application.yml).
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

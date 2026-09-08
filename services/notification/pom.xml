@@ -15,6 +15,28 @@
   <packaging>jar</packaging>
   <name>notification</name>
 
+  <properties>
+    <!-- Same patch-level bump as services/payment/booking/event: newer than the Spring Boot
+         3.3.x BOM's managed version (1.19.8), kept in sync across modules so every Testcontainers
+         suite in the repo runs on one version. -->
+    <testcontainers.version>1.20.4</testcontainers.version>
+  </properties>
+
+  <!-- Overrides the Spring Boot BOM's testcontainers-bom import (1.19.8) — a child's own
+       dependencyManagement entry takes precedence over an inherited one, unlike a plain property
+       override, which the parent's already-imported/resolved BOM entries would ignore. -->
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>testcontainers-bom</artifactId>
+        <version>${testcontainers.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
   <dependencies>
     <!-- Shared Kafka command/event DTOs + producer/consumer/DLQ config support, per
          docs/adr/0003-shared-messaging-module-for-kafka-contracts.md. -->
@@ -58,6 +80,33 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- EmbeddedKafka for the Kafka-wiring test, mirroring services/payment's
+         PaymentKafkaWiringTest and the messaging module's KafkaRoundTripTest. -->
+    <dependency>
+      <groupId>org.springframework.kafka</groupId>
+      <artifactId>spring-kafka-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.awaitility</groupId>
+      <artifactId>awaitility</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>postgresql</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

@@ -126,5 +126,26 @@ services:
       kafka:
         condition: service_healthy
 
+  # Phase 9: pure booking.events consumer (notification "sends" mock mail/SMS). Kafka-only — no
+  # inbound REST, so no gateway route (same rule as the payment block above); no Redis dependency
+  # either, unlike booking. Mirrors the payment block's build/env/depends_on style.
+  notification:
+    build:
+      context: ./services/notification
+      dockerfile: Dockerfile
+    container_name: ticketing-notification
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ticketing_notification
+      SPRING_DATASOURCE_USERNAME: notification_app
+      SPRING_DATASOURCE_PASSWORD: notification_app_pw
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
 volumes:
   postgres-data:
