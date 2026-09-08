@@ -28,27 +28,28 @@ was followed.
 
 ## Current state (as of 2026-09-08)
 
-**Phases 1–8 (backend) and Phase 10–11 (frontend) are complete.** Phase 3 (auth) landed in
+**Phases 1–9 (backend) and Phase 10–11 (frontend) are complete.** Phase 3 (auth) landed in
 `7dff70f`, Phase 5 (event catalog) in `62091ee`, Phase 4 (gateway with JWT validation) in
 `8a47d93`, Phase 6 (Kafka topics & DTO scaffolding) in `d35012b`, Phase 7 (booking CRUD + Redis
-seat holds) in `abb2de4`, a gateway fix wiring up booking and event routes in `f7d9030`, and Phase
-10 (frontend architecture review, advisory-only) fed directly into Phase 11 (frontend auth + event
-browsing, screens 1-3), which landed in `d78656c`.
+seat holds) in `abb2de4`, a gateway fix wiring up booking and event routes in `f7d9030`, Phase 8
+(payment mock + checkout saga wiring) in `d22d465`, and Phase 10 (frontend architecture review,
+advisory-only) fed directly into Phase 11 (frontend auth + event browsing, screens 1-3), which
+landed in `d78656c`.
 
-**Phase 8 (payment mock + checkout saga wiring) is functionally complete and verified
-(23/23 booking tests, 5/5 payment tests, 2/2 messaging tests, all green in a combined
-`-am` build) but is sitting as uncommitted working-tree changes as of this log entry** — see the
-Phase 8 entry below for what's in it; whoever picks up the next session should commit it (or ask
-why it wasn't committed) before starting Phase 9. It closed out all of the Phase 6 review findings
-that were deferred to it (force-fail field, DLT bootstrap, dedup-store convention, `eventId`→
-`messageId` rename) and Phase 7's two known gaps (hold-expiry sweep, `GET
-/api/v1/bookings/availability`).
+**Phase 9 (notification service) is functionally complete and verified (3/3 new
+`BookingEventListenerTest` cases green, combined `messaging`+`booking`+`payment`+`notification`
+module compile confirmed) but is sitting as uncommitted working-tree changes as of this log
+entry** — see the Phase 9 entry below for what's in it; whoever picks up the next session should
+commit it (or ask why it wasn't committed) before starting Phase 12. Per `docs/roadmap.md`, Phase
+9 is also the "backend vertical slice is now demoable via curl/Postman" checkpoint — a good place
+to pause and manually walk the full happy/force-fail/timeout paths before frontend work resumes.
 
 The Testcontainers/Docker blocker noted on 2026-09-07 remains **resolved** (native WSL2 Docker
-Engine, see "Environment" below). **Next: Phase 9 — Notification service** (pure `booking.events`
-consumer). Phase 12 (frontend seat-selection/checkout/confirmation, the centerpiece) is now
-**unblocked** — Phase 8 shipped the checkout and availability endpoints it was waiting on — but
-should still wait for Phase 9 per the roadmap's sequencing.
+Engine, see "Environment" below). **Next: Phase 12 — Frontend seat-selection/checkout/confirmation**
+(the centerpiece), now fully unblocked on both the backend saga (Phase 8) and the notification leg
+(Phase 9). Phase 10's frontend-architecture recommendations already cover this phase's screens; no
+new architecture pass is expected to be needed, but worth a quick check before diving in since it's
+been a couple of phases since that review ran.
 
 Local toolchain is installed and working on this machine (see "Environment" below) — a fresh
 session does not need to reinstall anything, just re-verify with the commands in that section. One
@@ -479,6 +480,37 @@ a future session doesn't assume `git log` reflects the true state of the code on
   suite green, ~4m52s total.
 - No commit yet — see "Current state" above.
 
+### Phase 9 — Notification service (2026-09-08)
+
+**Not yet committed** — exists as uncommitted working-tree changes (`services/notification` was
+an empty skeleton going into this phase; `docker-compose.yml` also modified). Built by
+`message-broker`.
+
+- Pure `booking.events` consumer, no inbound REST and no gateway route — same Kafka-only shape as
+  `payment`, by design (mirrors the existing precedent, not a new decision).
+- **Deliberately reused, not reinvented, two conventions Phase 8 established** (per the standing
+  instruction left in the previous "Next up" section): the `existsById` fast-path +
+  `REQUIRES_NEW`-sub-transaction claim-insert idempotency pattern, copied from payment's
+  `PaymentProcessingService` (new `processed_messages` table here too); and the dual-consumer-group
+  + `__TypeId__`-header `RecordFilterStrategy` pattern for splitting `BookingConfirmedEvent`/
+  `BookingCancelledEvent` off one topic, copied from booking's `KafkaConfig`/
+  `PaymentResultListener` — avoids the same same-topic-multiple-types bug Phase 8 caught and fixed
+  (see that entry above) from being reintroduced here.
+- New `V1__create_notifications_schema.sql` (`notifications` + `processed_messages` tables),
+  `NotificationService`, `BookingEventListener`, `KafkaConfig`. Each event type writes one
+  `notifications` row (mock — no real mail/SMS send, per root `CLAUDE.md`'s notification scope);
+  cancelled events record the cancellation reason on the row.
+- `docker-compose.yml` gained a `notification` app service block (port 8085), mirroring `payment`'s
+  block shape (own Postgres role via the existing `init-multi-db.sh` loop, Kafka `depends_on` on
+  the internal listener).
+- Tests: `BookingEventListenerTest`, 3/3 green — confirmed→row, cancelled→row-with-reason, and
+  dedup-on-redelivery (same `messageId` delivered twice produces no duplicate row).
+- Verified a combined-module compile across `messaging`, `booking`, `payment`, `notification`
+  together (not notification in isolation) succeeds, consistent with Phase 8's practice of
+  checking cross-module compatibility whenever multiple phases' code shares the `messaging`
+  module's contracts.
+- No commit yet — see "Current state" above.
+
 ### Phase 10 — Frontend architecture pass
 
 - Advisory-only review by `frontend-architecture`, no code produced. Confirmed `docs/user-flow.md`
@@ -608,37 +640,35 @@ reinstall, unless one of these checks fails:
     green multi-module run: `./mvnw -pl gateway,services/auth,services/event test` → 42/42 tests,
     `BUILD SUCCESS`.
 
-## Next up: Phase 9 — Notification service
+## Next up: Phase 12 — Frontend seat selection, checkout, confirmation (the centerpiece)
 
-**Before anything else: commit Phase 8's working-tree changes** (see "Current state" above) — a
-future session should not start Phase 9 on top of an uncommitted Phase 8 without first checking why
-it wasn't committed and getting it landed.
+**Before anything else: commit Phase 9's working-tree changes** (see "Current state" above) — a
+future session should not start Phase 12 on top of an uncommitted Phase 9 without first checking
+why it wasn't committed and getting it landed. (Phase 8 hit the same situation last session and was
+committed as `d22d465` before Phase 9 started — follow the same pattern here.)
 
-Per `docs/roadmap.md`: a pure Kafka consumer of `booking.events` (`BookingConfirmedEvent`/
-`BookingCancelledEvent`), a `notifications` table, idempotent on message id, logging
-CONFIRMED/CANCELLED notifications. No inbound REST — mirrors payment's Kafka-only shape.
-**Agent:** `message-broker`.
+Per `docs/roadmap.md`: `/events/[eventId]/seats` (seat map, hold click, countdown, disabled
+HELD/SOLD, 409 handling — demoable live in two browser tabs), `/checkout/[bookingId]` (mock payment
+form, poll `GET /bookings/{id}` until terminal), `/checkout/[bookingId]/confirm`
+(CONFIRMED/CANCELLED-EXPIRED views with retry link). **Agents:** `frontend`; `figma-screen-design`
+only if the seat-map/countdown UI needs more detail than Phase 1's wireframes already provide.
 
-Reuse, don't reinvent, two patterns Phase 8 just established:
-1. The `existsById` fast-path + `REQUIRES_NEW`-sub-transaction claim-insert idempotency pattern
-   from payment's `PaymentProcessingService` (see the Phase 8 entry above) — this is now the house
-   convention for every Kafka consumer that needs dedup.
-2. The dual-consumer-group + `__TypeId__`-header `RecordFilterStrategy` pattern booking's
-   `PaymentResultListener` uses to safely split `payment.events` by event type — `booking.events`
-   has the exact same "one topic, two event types" shape, and the naive
-   `VALUE_DEFAULT_TYPE`-based approach the Phase 8 plan originally called for was a real bug (see
-   above), not a stylistic choice.
+This phase is now fully unblocked: Phase 8 shipped `POST /bookings/{id}/checkout` and
+`GET /bookings/availability?eventId=`, and Phase 9 closed the loop with the notification leg of the
+saga, satisfying the roadmap's sequencing note that Phase 12 should wait for Phase 9 so the full
+saga is in place before Playwright exercises it end to end.
 
-**Verify:** re-run the three saga scenarios (happy/force-fail/timeout) from Phase 8 and confirm one
-notification row per event, no duplicates on redelivery. This is the roadmap's Phase 9 checkpoint —
-after this, the backend vertical slice is demoable via curl/Postman, a natural pause point before
-frontend work resumes.
-
-**Frontend note**: Phase 12 (seat-selection/checkout/confirmation, the centerpiece) is now
-unblocked on the backend side — Phase 8 shipped `POST /bookings/{id}/checkout` and
-`GET /bookings/availability?eventId=` — but per the roadmap's sequencing it should still wait until
-Phase 9 lands so the full saga (including the notification leg) is in place before the frontend's
-Playwright E2E pass tries to exercise it end to end.
+Preconditions/reminders for whoever picks this up:
+- Phase 10's recommendations already cover this phase's hooks (`useCountdown`, `useBookingPolling`,
+  `useSeatSelection`) and state-management approach (plain React state, no Redux/SWR/React Query) —
+  reuse those, don't re-derive.
+- `fetchMyBookings()`/any `userId`-scoped call still needs the JWT `sub` claim decoded client-side
+  (booking doesn't parse JWTs itself, `userId` is a plain query param) — same gap Phase 10 flagged.
+- **Verify:** Playwright E2E covering all four scenarios against the full compose stack — happy
+  path, force-fail payment, short-TTL expiry, two-tab seat race. Per the roadmap this suite is the
+  definition of "done" for the vertical slice.
+- Remember this machine's port-8080 conflict (pre-existing Windows `Tomcat10.exe`) if running the
+  full stack via `docker-compose` locally — see the Phase 11 entry above.
 
 **Carried-forward, lower priority, unresolved from earlier phases**:
 - The price-is-client-supplied gap from Phase 7 (`HoldSeatRequest.price` is caller-supplied, not
