@@ -2,8 +2,9 @@
 
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getBooking } from "@/lib/bookingApi";
+import { checkout, getBooking } from "@/lib/bookingApi";
 import { ApiRequestError } from "@/lib/apiClient";
+import { CHECKOUT_TRIGGERED_STORAGE_KEY_PREFIX } from "@/lib/constants";
 import { useAuth } from "@/context/SessionProvider";
 import { useBookingPolling } from "@/hooks/useBookingPolling";
 import type { BookingResponse } from "@/types/booking";
@@ -25,8 +26,40 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<{ status: number; message: string } | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
 
   const polling = useBookingPolling(isSubmitted ? bookingId : null);
+
+  function checkoutTriggeredStorageKey() {
+    return `${CHECKOUT_TRIGGERED_STORAGE_KEY_PREFIX}${bookingId}`;
+  }
+
+  // Fallback trigger for the checkout saga: the normal flow already calls checkout() from the
+  // seats screen before navigating here (see handleProceedToPayment in the seats page), marking
+  // sessionStorage so this screen knows not to fire it again. A bookmarked/shared/duplicate-tab
+  // URL that lands directly here, however, never had that call made — "Pay now" is the fallback
+  // trigger in that case (business-rules.md: checkout is the single, sole trigger for the saga).
+  async function handlePay() {
+    setPayError(null);
+    const storageKey = checkoutTriggeredStorageKey();
+    const hasAlreadyTriggeredCheckout =
+      typeof window !== "undefined" && window.sessionStorage.getItem(storageKey) === "1";
+
+    if (!hasAlreadyTriggeredCheckout && booking?.status === "PENDING") {
+      try {
+        await checkout(bookingId);
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem(storageKey, "1");
+        }
+      } catch (err) {
+        setPayError(
+          err instanceof ApiRequestError ? err.detail : "Failed to start checkout.",
+        );
+        return;
+      }
+    }
+    setIsSubmitted(true);
+  }
 
   useEffect(() => {
     if (isAuthLoading) {
@@ -103,10 +136,15 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
         {isSubmitted ? (
           <PaymentProcessingOverlay />
         ) : (
-          <PaymentForm isDisabled={isSubmitted} onPay={() => setIsSubmitted(true)} />
+          <PaymentForm isDisabled={isSubmitted} onPay={handlePay} />
         )}
         <BookingSummary booking={polling.booking ?? booking} />
       </div>
+      {payError && (
+        <p className="text-sm text-red-700" role="alert">
+          {payError}
+        </p>
+      )}
       {polling.hasTimedOut && (
         <p className="text-sm text-red-700" role="alert">
           This is taking longer than expected. Refresh the page to check the latest status.

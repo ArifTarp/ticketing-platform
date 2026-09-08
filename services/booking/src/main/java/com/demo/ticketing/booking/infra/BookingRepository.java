@@ -29,6 +29,13 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     @EntityGraph(attributePaths = "items")
     List<Booking> findByUserIdAndStatusOrderByCreatedAtDesc(Long userId, BookingStatus status);
 
+    /**
+     * Backs ADR-0004: {@code BookingHoldService.holdSeats} appends to this booking (if present)
+     * instead of always creating a new one for the same {@code (userId, eventId)} pair.
+     */
+    @EntityGraph(attributePaths = "items")
+    Optional<Booking> findFirstByUserIdAndEventIdAndStatus(Long userId, Long eventId, BookingStatus status);
+
     /** Backs the Phase 8 hold-expiry sweep (indexed by {@code ix_bookings_status_expires_at}). */
     List<Booking> findByStatusAndExpiresAtBefore(BookingStatus status, Instant now);
 

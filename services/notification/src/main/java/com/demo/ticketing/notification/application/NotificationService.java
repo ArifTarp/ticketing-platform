@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
@@ -65,7 +67,7 @@ public class NotificationService {
     @Transactional
     public void onBookingConfirmed(UUID messageId, Long bookingId, Long userId, List<Long> seatIds,
                                     Instant confirmedAt) {
-        if (!tryClaimMessage(messageId)) {
+        if (processedMessageRepository.existsById(messageId)) {
             log.info("Duplicate BookingConfirmedEvent messageId={} bookingId={} — already processed, "
                     + "skipping (no new Notification row)", messageId, bookingId);
             return;
@@ -80,6 +82,9 @@ public class NotificationService {
         notificationRepository.save(notification);
         log.info("Mock-sent BOOKING_CONFIRMED notification to {} for bookingId={} messageId={}",
                 recipient, bookingId, messageId);
+
+        // Claim-after-work, not claim-before-work — see #claimMessageAfterCommit's javadoc.
+        claimMessageAfterCommit(messageId, bookingId);
     }
 
     /**
@@ -89,7 +94,7 @@ public class NotificationService {
     @Transactional
     public void onBookingCancelled(UUID messageId, Long bookingId, Long userId, String reason,
                                     Instant cancelledAt) {
-        if (!tryClaimMessage(messageId)) {
+        if (processedMessageRepository.existsById(messageId)) {
             log.info("Duplicate BookingCancelledEvent messageId={} bookingId={} — already processed, "
                     + "skipping (no new Notification row)", messageId, bookingId);
             return;
@@ -104,6 +109,9 @@ public class NotificationService {
         notificationRepository.save(notification);
         log.info("Mock-sent BOOKING_CANCELLED notification to {} for bookingId={} messageId={} reason={}",
                 recipient, bookingId, messageId, reason);
+
+        // Claim-after-work, not claim-before-work — see #claimMessageAfterCommit's javadoc.
+        claimMessageAfterCommit(messageId, bookingId);
     }
 
     /**
@@ -113,6 +121,37 @@ public class NotificationService {
      */
     private String recipientFor(Long userId) {
         return "user-" + userId + "@example.com";
+    }
+
+    /**
+     * Registers the actual idempotency claim to run only <b>after</b> the calling
+     * {@code @Transactional} method's outer transaction has committed (see
+     * {@code docs/adr/0005-...idempotency...md}: "the claim must only be committed once the rest of
+     * the unit of work is known to succeed"). Mirrors
+     * {@code services/payment/.../PaymentProcessingService#claimMessageAfterCommit}'s javadoc for
+     * the full rationale: an inline call at the end of the method body would still race the outer
+     * transaction's own commit (which only happens after the method returns, via the AOP proxy), so
+     * we hook the {@code afterCommit} transaction-synchronization callback instead.
+     *
+     * <p><b>Accepted tradeoff:</b> if the process crashes in the small window between the outer
+     * commit and this callback running, the message is reprocessed on redelivery and a duplicate
+     * {@link Notification} row could be written (notification has no unique business key to catch
+     * this the way payment's {@code payments.booking_id} constraint does). That is judged acceptable
+     * here — notification is a mock "best effort" sink with no downstream consumers of its own — and
+     * is strictly better than the old bug, where a mid-work failure left the message permanently
+     * claimed with no {@link Notification} row ever written at all.
+     */
+    private void claimMessageAfterCommit(UUID messageId, Long bookingId) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                if (!tryClaimMessage(messageId)) {
+                    log.warn("Post-commit idempotency claim for messageId={} bookingId={} lost a race — "
+                            + "a concurrent redelivery of the same messageId already claimed it after this "
+                            + "call's business work had already committed", messageId, bookingId);
+                }
+            }
+        });
     }
 
     /**

@@ -164,4 +164,55 @@ class BookingHoldControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
+
+    /** ADR-0004: a second hold call for the same (userId, eventId) appends to the existing booking. */
+    @Test
+    void aSecondHoldCallForTheSameUserAndEventAppendsToTheExistingPendingBooking() {
+        long eventId = 5006L;
+        HoldBookingRequest first = new HoldBookingRequest(1L, eventId,
+                List.of(new HoldSeatRequest(1L, new BigDecimal("100.00"))));
+        HoldBookingRequest second = new HoldBookingRequest(1L, eventId,
+                List.of(new HoldSeatRequest(2L, new BigDecimal("150.00"))));
+
+        ResponseEntity<JsonNode> firstResponse = hold(first);
+        ResponseEntity<JsonNode> secondResponse = hold(second);
+
+        assertThat(firstResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(secondResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        long firstBookingId = firstResponse.getBody().get("id").asLong();
+        long secondBookingId = secondResponse.getBody().get("id").asLong();
+        assertThat(secondBookingId).isEqualTo(firstBookingId);
+
+        JsonNode secondBody = secondResponse.getBody();
+        assertThat(secondBody.get("items")).hasSize(2);
+        assertThat(secondBody.get("total").decimalValue()).isEqualByComparingTo("250.00");
+
+        Long bookingCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM bookings WHERE event_id = ?", Long.class, eventId);
+        assertThat(bookingCount).isEqualTo(1L);
+    }
+
+    /** ADR-0004: the max-6-seats rule is cumulative across appended calls, not per request. */
+    @Test
+    void appendingSeatsPastTheCumulativeSixSeatLimitReturns400() {
+        long eventId = 5007L;
+        HoldBookingRequest first = new HoldBookingRequest(1L, eventId, List.of(
+                new HoldSeatRequest(1L, BigDecimal.TEN), new HoldSeatRequest(2L, BigDecimal.TEN),
+                new HoldSeatRequest(3L, BigDecimal.TEN), new HoldSeatRequest(4L, BigDecimal.TEN),
+                new HoldSeatRequest(5L, BigDecimal.TEN)));
+        HoldBookingRequest second = new HoldBookingRequest(1L, eventId, List.of(
+                new HoldSeatRequest(6L, BigDecimal.TEN), new HoldSeatRequest(7L, BigDecimal.TEN)));
+
+        ResponseEntity<JsonNode> firstResponse = hold(first);
+        ResponseEntity<JsonNode> secondResponse = hold(second);
+
+        assertThat(firstResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(secondResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+
+        Long bookingItemCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM booking_items bi JOIN bookings b ON b.id = bi.booking_id "
+                        + "WHERE b.event_id = ?", Long.class, eventId);
+        assertThat(bookingItemCount).isEqualTo(5L);
+    }
 }

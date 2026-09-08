@@ -10,6 +10,7 @@ import { useAuth } from "@/context/SessionProvider";
 import { useSeatSelection } from "@/hooks/useSeatSelection";
 import { useCountdown } from "@/hooks/useCountdown";
 import { toAvailabilityMap } from "@/lib/seatMap";
+import { CHECKOUT_TRIGGERED_STORAGE_KEY_PREFIX } from "@/lib/constants";
 import type { SeatMapResponse } from "@/types/event";
 import type { SeatAvailabilityResponse } from "@/types/booking";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -112,6 +113,12 @@ export default function SeatSelectionPage({ params }: SeatSelectionPageProps) {
     setCheckoutError(null);
     try {
       await checkout(selection.booking.id);
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(
+          `${CHECKOUT_TRIGGERED_STORAGE_KEY_PREFIX}${selection.booking.id}`,
+          "1",
+        );
+      }
       router.push(`/checkout/${selection.booking.id}`);
     } catch (err) {
       setCheckoutError(
@@ -178,6 +185,7 @@ export default function SeatSelectionPage({ params }: SeatSelectionPageProps) {
             availabilityBySeatId={availabilityBySeatId}
             selectedSeatIds={selection.selectedSeatIds}
             onToggleSeat={selection.toggleSeat}
+            isLocked={Boolean(selection.booking)}
           />
           <SeatMapLegend />
         </div>

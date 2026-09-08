@@ -17,6 +17,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
@@ -74,7 +76,7 @@ public class PaymentProcessingService {
      */
     @Transactional
     public PaymentOutcome process(UUID messageId, Long bookingId, BigDecimal amount) {
-        if (!tryClaimMessage(messageId)) {
+        if (processedMessageRepository.existsById(messageId)) {
             log.info("Duplicate PaymentRequestedCommand messageId={} bookingId={} — already processed, "
                     + "skipping (no new Payment row, no event to publish)", messageId, bookingId);
             return PaymentOutcome.alreadyProcessed();
@@ -83,6 +85,7 @@ public class PaymentProcessingService {
         Payment payment = new Payment(bookingId, amount, PaymentStatus.PENDING);
         paymentRepository.save(payment);
 
+        PaymentOutcome outcome;
         if (paymentMockRule.shouldFail(amount)) {
             payment.markFailed();
             paymentRepository.save(payment);
@@ -91,18 +94,61 @@ public class PaymentProcessingService {
             log.info("Mock payment FAILED bookingId={} amount={} messageId={}", bookingId, amount, messageId);
             PaymentFailedEvent event = new PaymentFailedEvent(UUID.randomUUID(), bookingId, reason, Instant.now());
             applicationEventPublisher.publishEvent(new PaymentFailedInternalEvent(event));
-            return PaymentOutcome.failed(bookingId, amount, reason);
+            outcome = PaymentOutcome.failed(bookingId, amount, reason);
+        } else {
+            String providerRef = "mock-" + UUID.randomUUID();
+            payment.markCompleted(providerRef);
+            paymentRepository.save(payment);
+            log.info("Mock payment COMPLETED bookingId={} amount={} providerRef={} messageId={}",
+                    bookingId, amount, providerRef, messageId);
+            PaymentCompletedEvent event =
+                    new PaymentCompletedEvent(UUID.randomUUID(), bookingId, providerRef, amount, Instant.now());
+            applicationEventPublisher.publishEvent(new PaymentCompletedInternalEvent(event));
+            outcome = PaymentOutcome.completed(bookingId, amount, providerRef);
         }
 
-        String providerRef = "mock-" + UUID.randomUUID();
-        payment.markCompleted(providerRef);
-        paymentRepository.save(payment);
-        log.info("Mock payment COMPLETED bookingId={} amount={} providerRef={} messageId={}",
-                bookingId, amount, providerRef, messageId);
-        PaymentCompletedEvent event =
-                new PaymentCompletedEvent(UUID.randomUUID(), bookingId, providerRef, amount, Instant.now());
-        applicationEventPublisher.publishEvent(new PaymentCompletedInternalEvent(event));
-        return PaymentOutcome.completed(bookingId, amount, providerRef);
+        // Claim-after-work, not claim-before-work (see class-level ADR-0005 reference and
+        // #claimMessageAfterCommit's javadoc): the messageId is only durably marked "processed"
+        // once we know the Payment row + outbox event above have actually committed.
+        claimMessageAfterCommit(messageId, bookingId);
+        return outcome;
+    }
+
+    /**
+     * Registers the actual idempotency claim to run only <b>after</b> {@link #process}'s outer
+     * transaction has committed (see {@code docs/adr/0005-...idempotency...md}: "the claim must
+     * only be committed once the rest of the unit of work is known to succeed"). We cannot simply
+     * call {@link #tryClaimMessage} inline at the end of {@link #process}'s method body and be done
+     * with it: {@link #process} is itself the {@code @Transactional} boundary, so the outer
+     * transaction's actual commit only happens <i>after</i> the method body returns, via the Spring
+     * AOP proxy — a claim inserted "at the end of the method" would still race the outer commit, not
+     * follow it. Instead we hook the outer transaction's {@code afterCommit} synchronization
+     * callback, which Spring guarantees runs only once that outer transaction has durably committed
+     * (mirrors {@code KafkaOutboxPublisher}'s {@code @TransactionalEventListener(AFTER_COMMIT)}
+     * pattern for the same reason — publish/claim only after the local write is safe).
+     *
+     * <p><b>Accepted tradeoff:</b> if the process crashes in the (very small) window between the
+     * outer transaction's commit and this {@code afterCommit} callback actually running the claim
+     * insert, the message will be reprocessed on redelivery (since {@code existsById} will still say
+     * "not seen"). That reprocessing attempt will try to insert a second {@link Payment} row for the
+     * same {@code bookingId} and fail on the {@code payments.booking_id} unique constraint, which
+     * aborts that redelivery loudly (visible retry/DLQ) rather than silently leaving the original
+     * message a permanently-claimed zombie with nothing published — which is exactly the bug this
+     * fix replaces. Claim-after-work is preferred over claim-before-work precisely because this
+     * failure mode is loud and narrow, whereas the old failure mode was silent and unbounded (the
+     * booking would sit orphaned until the hold-expiry sweep).
+     */
+    private void claimMessageAfterCommit(UUID messageId, Long bookingId) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                if (!tryClaimMessage(messageId)) {
+                    log.warn("Post-commit idempotency claim for messageId={} bookingId={} lost a race — "
+                            + "a concurrent redelivery of the same messageId already claimed it after this "
+                            + "call's business work had already committed", messageId, bookingId);
+                }
+            }
+        });
     }
 
     /**

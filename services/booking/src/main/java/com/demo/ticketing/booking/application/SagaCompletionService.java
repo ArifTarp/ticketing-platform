@@ -22,7 +22,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.List;
@@ -52,6 +55,7 @@ public class SagaCompletionService {
     private final ProcessedMessageRepository processedMessageRepository;
     private final SeatHoldLockService seatHoldLockService;
     private final ApplicationEventPublisher eventPublisher;
+    private final TransactionTemplate requiresNewTransactionTemplate;
 
     public SagaCompletionService(BookingRepository bookingRepository,
                                   BookingItemRepository bookingItemRepository,
@@ -59,7 +63,8 @@ public class SagaCompletionService {
                                   SagaStateRepository sagaStateRepository,
                                   ProcessedMessageRepository processedMessageRepository,
                                   SeatHoldLockService seatHoldLockService,
-                                  ApplicationEventPublisher eventPublisher) {
+                                  ApplicationEventPublisher eventPublisher,
+                                  PlatformTransactionManager transactionManager) {
         this.bookingRepository = bookingRepository;
         this.bookingItemRepository = bookingItemRepository;
         this.seatAvailabilityRepository = seatAvailabilityRepository;
@@ -67,11 +72,18 @@ public class SagaCompletionService {
         this.processedMessageRepository = processedMessageRepository;
         this.seatHoldLockService = seatHoldLockService;
         this.eventPublisher = eventPublisher;
+        // ADR-0005's canonical idempotency-claim pattern: a dedicated REQUIRES_NEW template, not
+        // @Transactional(propagation = REQUIRES_NEW) on a sibling method of this same bean (that
+        // form of self-invocation bypasses the Spring AOP proxy). See
+        // services/payment/.../PaymentProcessingService.tryClaimMessage for the reference
+        // implementation this mirrors.
+        this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
+        this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Transactional
     public void onCompleted(UUID messageId, Long bookingId) {
-        if (!tryMarkProcessed(messageId)) {
+        if (!tryClaimMessage(messageId)) {
             log.info("Duplicate PaymentCompletedEvent messageId={} bookingId={}, skipping", messageId, bookingId);
             return;
         }
@@ -97,7 +109,7 @@ public class SagaCompletionService {
 
     @Transactional
     public void onFailed(UUID messageId, Long bookingId, String reason) {
-        if (!tryMarkProcessed(messageId)) {
+        if (!tryClaimMessage(messageId)) {
             log.info("Duplicate PaymentFailedEvent messageId={} bookingId={}, skipping", messageId, bookingId);
             return;
         }
@@ -122,14 +134,25 @@ public class SagaCompletionService {
     }
 
     /**
-     * Inserts a {@link ProcessedMessage} row and flushes immediately so a primary-key violation on
-     * a duplicate {@code messageId} surfaces right here (and is caught) rather than poisoning the
-     * rest of this transaction at the next implicit flush/commit.
+     * Attempts to claim {@code messageId} as newly-seen, returning {@code true} iff this call is
+     * the one that gets to process it. Canonical ADR-0005 pattern: an {@code existsById} fast path,
+     * then — if absent — an insert run in its own {@code REQUIRES_NEW} transaction/connection via
+     * {@link #requiresNewTransactionTemplate}, so a lost id-uniqueness race (two redeliveries
+     * processed concurrently) only aborts that isolated sub-transaction rather than poisoning this
+     * method's outer transaction on Postgres. See {@code PaymentProcessingService.tryClaimMessage}
+     * (the reference implementation this mirrors) for the full rationale on why a plain
+     * {@code save()}/{@code saveAndFlush()} + catch inside the caller's own transaction is unsafe.
      */
-    private boolean tryMarkProcessed(UUID messageId) {
+    private boolean tryClaimMessage(UUID messageId) {
+        if (processedMessageRepository.existsById(messageId)) {
+            return false;
+        }
         try {
-            processedMessageRepository.saveAndFlush(new ProcessedMessage(messageId));
-            return true;
+            Boolean claimed = requiresNewTransactionTemplate.execute(status -> {
+                processedMessageRepository.saveAndFlush(new ProcessedMessage(messageId));
+                return true;
+            });
+            return Boolean.TRUE.equals(claimed);
         } catch (DataIntegrityViolationException ex) {
             return false;
         }

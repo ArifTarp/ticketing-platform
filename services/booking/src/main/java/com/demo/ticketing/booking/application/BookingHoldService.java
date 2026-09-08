@@ -5,6 +5,7 @@ import com.demo.ticketing.booking.application.exception.SeatUnavailableException
 import com.demo.ticketing.booking.application.mapper.BookingMapper;
 import com.demo.ticketing.booking.domain.Booking;
 import com.demo.ticketing.booking.domain.BookingItem;
+import com.demo.ticketing.booking.domain.BookingStatus;
 import com.demo.ticketing.booking.domain.SeatAvailability;
 import com.demo.ticketing.booking.domain.SeatAvailabilityStatus;
 import com.demo.ticketing.booking.infra.BookingRepository;
@@ -41,6 +42,9 @@ import java.util.UUID;
  */
 @Service
 public class BookingHoldService {
+
+    /** business-rules.md: max 6 seats per booking, enforced cumulatively per ADR-0004. */
+    private static final int MAX_SEATS_PER_BOOKING = 6;
 
     private final BookingRepository bookingRepository;
     private final SeatAvailabilityRepository seatAvailabilityRepository;
@@ -108,13 +112,29 @@ public class BookingHoldService {
      * {@code SeatAvailability} disagreeing with Redis (e.g. a still-{@code HELD} row whose Redis key
      * already expired because the Phase 8 timeout sweep doesn't exist yet — see
      * {@code services/booking/CLAUDE.md}).
+     *
+     * <p>ADR-0004: looks up an existing {@code PENDING} booking for this {@code (userId, eventId)}
+     * pair and appends the newly-locked seats to it (recomputing {@code total} and extending
+     * {@code expiresAt}) instead of always creating a second {@code Booking} row. The max-6-seats
+     * rule is enforced cumulatively against that existing booking's item count, not per call.
      */
     private Booking persistHold(HoldBookingRequest request) {
         Instant expiresAt = Instant.now().plus(SeatHoldLockService.HOLD_TTL);
-        BigDecimal total = request.seats().stream()
-                .map(HoldSeatRequest::price)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        Booking booking = new Booking(request.userId(), request.eventId(), total, expiresAt);
+
+        Booking booking = bookingRepository
+                .findFirstByUserIdAndEventIdAndStatus(request.userId(), request.eventId(), BookingStatus.PENDING)
+                .orElse(null);
+
+        int existingSeatCount = booking == null ? 0 : booking.getItems().size();
+        if (existingSeatCount + request.seats().size() > MAX_SEATS_PER_BOOKING) {
+            throw new InvalidHoldRequestException(
+                    "a booking may hold at most " + MAX_SEATS_PER_BOOKING + " seats");
+        }
+
+        boolean isNewBooking = booking == null;
+        if (isNewBooking) {
+            booking = new Booking(request.userId(), request.eventId(), BigDecimal.ZERO, expiresAt);
+        }
 
         for (HoldSeatRequest seat : request.seats()) {
             SeatAvailability availability = seatAvailabilityRepository
@@ -129,6 +149,11 @@ public class BookingHoldService {
                 throw new SeatUnavailableException(List.of(seat.seatId()));
             }
             booking.addItem(new BookingItem(booking, seat.seatId(), seat.price()));
+        }
+
+        booking.recalculateTotal();
+        if (!isNewBooking) {
+            booking.extendExpiry(expiresAt);
         }
 
         return bookingRepository.save(booking);

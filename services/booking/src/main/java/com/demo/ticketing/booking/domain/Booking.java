@@ -105,4 +105,25 @@ public class Booking {
     public void addItem(BookingItem item) {
         this.items.add(item);
     }
+
+    /**
+     * Recomputes {@link #total} as the sum of all current {@link #items}' prices. Used by
+     * {@code BookingHoldService} (ADR-0004) when appending newly-held seats to an existing
+     * {@code PENDING} booking, since {@link #total} is otherwise only ever set once at
+     * construction time.
+     */
+    public void recalculateTotal() {
+        this.total = items.stream().map(BookingItem::getPrice).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * Pushes {@link #expiresAt} out to {@code candidate} if it is later than the current value.
+     * Used when appending a fresh 10-minute hold to an existing booking (ADR-0004) so the whole
+     * booking's expiry reflects the most recently held seat, never a stale earlier deadline.
+     */
+    public void extendExpiry(Instant candidate) {
+        if (candidate.isAfter(this.expiresAt)) {
+            this.expiresAt = candidate;
+        }
+    }
 }

@@ -81,9 +81,15 @@ class SeatHoldConcurrencyTest {
 
     @Test
     void twoConcurrentHoldsOnTheSameSeatResolveToExactlyOneWinnerEveryTime() throws Exception {
-        long eventId = 42_000L;
-
         for (int i = 0; i < ITERATIONS; i++) {
+            // A distinct eventId per iteration (not one shared eventId across all 25 iterations):
+            // ADR-0004 makes BookingHoldService append new seats to an existing PENDING booking for
+            // the same (userId, eventId) pair rather than always creating a new one. User A/B reuse
+            // the same userId (1L/2L) across every iteration, so a shared eventId would accumulate
+            // all 25 iterations' seats onto one growing booking per user and trip the cumulative
+            // max-6-seats rule after iteration 6. Each iteration gets its own fresh (userId,
+            // eventId) pair instead, keeping every iteration an independent "first hold" case.
+            long eventId = 42_000L + i;
             long seatId = 42_000L + i;
             CountDownLatch bothReady = new CountDownLatch(2);
             CountDownLatch go = new CountDownLatch(1);

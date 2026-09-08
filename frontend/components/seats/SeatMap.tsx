@@ -9,6 +9,11 @@ interface SeatMapProps {
   availabilityBySeatId: Map<number, SeatAvailabilityStatus>;
   selectedSeatIds: Set<number>;
   onToggleSeat: (seat: SeatDto) => void;
+  /** True once the current selection has already been turned into a held booking — freezes every
+   *  seat so further clicks can't mutate selectedSeats/total without a matching holdSeats() call,
+   *  which would let the displayed selection silently diverge from the booking actually held.
+   *  Cleared again once the user starts a new selection (e.g. after the hold expires). */
+  isLocked?: boolean;
 }
 
 interface SectionGroup {
@@ -42,7 +47,13 @@ function groupBySection(seats: SeatDto[]): SectionGroup[] {
  * Renders sections/rows of `Seat`s by merging the static layout (event service) with live
  * availability (booking service) client-side, per ADR-0001/business-rules.md's "Seat map contract".
  */
-export function SeatMap({ seats, availabilityBySeatId, selectedSeatIds, onToggleSeat }: SeatMapProps) {
+export function SeatMap({
+  seats,
+  availabilityBySeatId,
+  selectedSeatIds,
+  onToggleSeat,
+  isLocked = false,
+}: SeatMapProps) {
   const sections = useMemo(() => groupBySection(seats), [seats]);
 
   return (
@@ -64,6 +75,7 @@ export function SeatMap({ seats, availabilityBySeatId, selectedSeatIds, onToggle
                       seat={seat}
                       status={resolveSeatStatus(seat.seatId, availabilityBySeatId, selectedSeatIds)}
                       onClick={onToggleSeat}
+                      isLocked={isLocked}
                     />
                   ))}
                 </div>

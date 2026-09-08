@@ -62,12 +62,24 @@ public class CheckoutService {
         }
 
         SagaState sagaState = sagaStateRepository.findByBookingId(bookingId).orElse(null);
+        if (sagaState != null
+                && STEP_PAYMENT_REQUESTED.equals(sagaState.getStep())
+                && STATUS_IN_PROGRESS.equals(sagaState.getStatus())) {
+            // A checkout for this booking is already in flight: the original
+            // PaymentRequestedCommand is presumably still on its way through the saga (a lost-
+            // response retry of this same POST would otherwise mint and publish a second distinct
+            // command, since the booking itself stays PENDING and nothing else blocks a second
+            // call). Don't create a new SagaState row or publish another command -- just return
+            // the current booking state.
+            return bookingMapper.toResponse(booking);
+        }
+
         if (sagaState == null) {
             sagaStateRepository.save(new SagaState(bookingId, STEP_PAYMENT_REQUESTED, STATUS_IN_PROGRESS));
         } else {
-            // A previous checkout attempt already created this row (e.g. the Kafka publish never
-            // confirmed, or the caller retried) -- update it in place rather than inserting a
-            // duplicate, since booking_id is unique.
+            // sagaState exists but is in some other step/status (e.g. left over from a prior,
+            // already-terminated saga attempt) -- move it back to PAYMENT_REQUESTED/IN_PROGRESS
+            // in place rather than inserting a duplicate, since booking_id is unique.
             sagaState.transitionTo(STEP_PAYMENT_REQUESTED, STATUS_IN_PROGRESS);
         }
 

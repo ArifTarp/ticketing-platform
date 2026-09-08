@@ -5,6 +5,10 @@ interface SeatProps {
   seat: SeatDto;
   status: SeatVisualStatus;
   onClick: (seat: SeatDto) => void;
+  /** True once the current selection has already been turned into a held booking — freezes the
+   *  seat map so further clicks can't diverge selectedSeats/total from the booking that was
+   *  actually held (see SeatMap's `isLocked`). */
+  isLocked?: boolean;
 }
 
 const STATUS_CLASSES: Record<SeatVisualStatus, string> = {
@@ -15,8 +19,8 @@ const STATUS_CLASSES: Record<SeatVisualStatus, string> = {
 };
 
 /** Single seat square; visual variant is a pure function of its merged SeatAvailability status. */
-export function Seat({ seat, status, onClick }: SeatProps) {
-  const isClickable = status === "AVAILABLE" || status === "SELECTED";
+export function Seat({ seat, status, onClick, isLocked = false }: SeatProps) {
+  const isClickable = !isLocked && (status === "AVAILABLE" || status === "SELECTED");
 
   return (
     <button

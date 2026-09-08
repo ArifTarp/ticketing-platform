@@ -14,8 +14,11 @@ const CVC_PATTERN = /^\d{3,4}$/;
 
 /**
  * Mock card fields — cosmetic UX only (business-rules.md: no real PSP, no backend payment
- * endpoint). Client-side validation only; "Pay now" confirms intent and transitions the screen
- * straight to the processing overlay, it does not call any backend endpoint itself.
+ * endpoint). Client-side validation only; "Pay now" confirms intent and delegates to `onPay`,
+ * which transitions the screen to the processing overlay. `onPay` itself may call
+ * `POST /bookings/{id}/checkout` as a fallback if the checkout saga hasn't already been triggered
+ * from the seat-selection screen (see the checkout page for that logic) — this form has no
+ * knowledge of the backend call, it only confirms user intent.
  */
 export function PaymentForm({ isDisabled, onPay }: PaymentFormProps) {
   const [cardNumber, setCardNumber] = useState("");
