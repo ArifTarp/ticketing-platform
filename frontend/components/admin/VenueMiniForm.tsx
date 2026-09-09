@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { createVenue } from "@/lib/adminApi";
 import { ApiRequestError } from "@/lib/apiClient";
 import type { VenueDto } from "@/types/event";
@@ -15,6 +15,14 @@ interface VenueMiniFormProps {
  * The venue create mini-form (name, address, city) → POST /api/v1/venues. Shared by VenueSelect's
  * inline "+ new venue" option and the standalone "+ Create venue" action (docs/user-flow.md
  * screen 8) so both entry points behave identically.
+ *
+ * Deliberately NOT a <form>: VenueSelect (and therefore this component) renders inside
+ * EventForm's own <form>, and a nested <form> is invalid HTML — the browser drops the inner
+ * <form> tag entirely, which turns this component's "Create venue" button into a plain submit
+ * button for the *outer* EventForm instead, silently closing/submitting the wrong form the moment
+ * it's pressed. A plain container + a type="button" submit handler works identically in both this
+ * nested context and the standalone (non-nested) "+ Create venue" modal, at the minor cost of no
+ * longer supporting Enter-to-submit.
  */
 export function VenueMiniForm({ onCreated, onCancel }: VenueMiniFormProps) {
   const [name, setName] = useState("");
@@ -23,8 +31,7 @@ export function VenueMiniForm({ onCreated, onCancel }: VenueMiniFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleSubmit() {
     setError(null);
 
     if (!name.trim() || !address.trim() || !city.trim()) {
@@ -44,7 +51,7 @@ export function VenueMiniForm({ onCreated, onCancel }: VenueMiniFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3">
       <FormError message={error} />
       <label className="flex flex-col gap-1 text-sm text-[var(--text-secondary)]">
         <span className="label-mono">Venue name</span>
@@ -77,13 +84,13 @@ export function VenueMiniForm({ onCreated, onCancel }: VenueMiniFormProps) {
         />
       </label>
       <div className="flex gap-2">
-        <button type="submit" disabled={isSubmitting} className="btn btn-primary">
+        <button type="button" onClick={handleSubmit} disabled={isSubmitting} className="btn btn-primary">
           {isSubmitting ? "Creating venue…" : "Create venue"}
         </button>
         <button type="button" onClick={onCancel} disabled={isSubmitting} className="btn btn-secondary">
           Cancel
         </button>
       </div>
-    </form>
+    </div>
   );
 }

@@ -30,19 +30,28 @@ export interface UseCountdownResult {
  * (seat selection) and screen 5 (checkout), both of which show the same live Redis-hold TTL.
  */
 export function useCountdown(expiresAt: string | null): UseCountdownResult {
-  const [remainingMs, setRemainingMs] = useState(() => (expiresAt ? msUntil(expiresAt) : 0));
+  // `remainingMs` is derived straight from `expiresAt` on every render — never held in state —
+  // so a change in `expiresAt` (e.g. a hold just succeeded, expiresAt going from null to ten
+  // minutes out) is reflected immediately. `tick` exists purely to force a re-render once a
+  // second so the derived value keeps counting down; it carries no time data itself. A previous
+  // version stored `remainingMs` in state seeded once on mount and only corrected by an effect on
+  // `expiresAt` changes — between the render where `expiresAt` became non-null and that effect
+  // running, `remainingMs` was still its stale initial 0, so `isExpired` (which only checks
+  // `expiresAt !== null && remainingMs <= 0`) was briefly (and wrongly) `true` right after every
+  // hold, which the seat-selection screen's "hold expired" effect took at face value.
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     if (!expiresAt) {
-      setRemainingMs(0);
       return;
     }
-    setRemainingMs(msUntil(expiresAt));
     const interval = setInterval(() => {
-      setRemainingMs(msUntil(expiresAt));
+      setTick((value) => value + 1);
     }, 1000);
     return () => clearInterval(interval);
   }, [expiresAt]);
+
+  const remainingMs = expiresAt ? msUntil(expiresAt) : 0;
 
   return {
     remainingMs,
