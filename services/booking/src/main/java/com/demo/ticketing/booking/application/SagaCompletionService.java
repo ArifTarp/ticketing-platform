@@ -25,6 +25,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
@@ -83,7 +85,7 @@ public class SagaCompletionService {
 
     @Transactional
     public void onCompleted(UUID messageId, Long bookingId) {
-        if (!tryClaimMessage(messageId)) {
+        if (processedMessageRepository.existsById(messageId)) {
             log.info("Duplicate PaymentCompletedEvent messageId={} bookingId={}, skipping", messageId, bookingId);
             return;
         }
@@ -91,6 +93,10 @@ public class SagaCompletionService {
         int updated = bookingRepository.transitionFromPending(bookingId, BookingStatus.CONFIRMED);
         if (updated == 0) {
             log.info("Booking {} already left PENDING (race with sweep/duplicate), skipping completion", bookingId);
+            // Nothing was actually done for this message on this attempt, but there is also nothing
+            // to redo on redelivery (the booking already left PENDING via some other path) — claiming
+            // it now is safe and prevents pointless reprocessing forever.
+            claimMessageAfterCommit(messageId, bookingId);
             return;
         }
 
@@ -105,11 +111,17 @@ public class SagaCompletionService {
         BookingConfirmedEvent event = new BookingConfirmedEvent(
                 UUID.randomUUID(), bookingId, booking.getUserId(), seatIds, Instant.now());
         eventPublisher.publishEvent(new BookingConfirmedInternalEvent(event));
+
+        // Claim-after-work, not claim-before-work (ADR-0005): only mark messageId "processed" once
+        // the transition/seat mutation/SagaState work above is known to succeed. See
+        // #claimMessageAfterCommit's javadoc for why this must be an afterCommit hook rather than a
+        // plain call here.
+        claimMessageAfterCommit(messageId, bookingId);
     }
 
     @Transactional
     public void onFailed(UUID messageId, Long bookingId, String reason) {
-        if (!tryClaimMessage(messageId)) {
+        if (processedMessageRepository.existsById(messageId)) {
             log.info("Duplicate PaymentFailedEvent messageId={} bookingId={}, skipping", messageId, bookingId);
             return;
         }
@@ -117,6 +129,7 @@ public class SagaCompletionService {
         int updated = bookingRepository.transitionFromPending(bookingId, BookingStatus.CANCELLED);
         if (updated == 0) {
             log.info("Booking {} already left PENDING (race with sweep/duplicate), skipping cancellation", bookingId);
+            claimMessageAfterCommit(messageId, bookingId);
             return;
         }
 
@@ -131,6 +144,52 @@ public class SagaCompletionService {
         BookingCancelledEvent event = new BookingCancelledEvent(
                 UUID.randomUUID(), bookingId, booking.getUserId(), "PAYMENT_FAILED", Instant.now());
         eventPublisher.publishEvent(new BookingCancelledInternalEvent(event));
+
+        claimMessageAfterCommit(messageId, bookingId);
+    }
+
+    /**
+     * Registers the actual idempotency claim to run only <b>after</b> this method's own outer
+     * {@code @Transactional} boundary has committed (ADR-0005: "the claim must only be committed
+     * once the rest of the unit of work is known to succeed — do not commit the claim before doing
+     * the business-logic work in the same call, or a mid-work failure leaves the message permanently
+     * marked 'processed' with nothing actually done or published"). This mirrors
+     * {@code PaymentProcessingService.claimMessageAfterCommit} (the reference implementation) —
+     * previously this class claimed the message via {@code tryClaimMessage} <em>before</em> running
+     * {@code transitionFromPending}/{@code markSold}/{@code upsertSagaState}, so a failure partway
+     * through that work rolled back the business logic but left the claim durably committed (it ran
+     * in its own {@code REQUIRES_NEW} transaction), permanently skipping the message on redelivery
+     * and leaving the booking stuck {@code PENDING} forever with no recovery path.
+     *
+     * <p>We cannot simply call {@link #tryClaimMessage} inline at the end of {@code onCompleted}/
+     * {@code onFailed}'s method body: those methods are themselves the {@code @Transactional}
+     * boundary, so the outer transaction's actual commit only happens <i>after</i> the method body
+     * returns, via the Spring AOP proxy — a claim inserted "at the end of the method" would still
+     * race the outer commit, not follow it. Instead we hook the outer transaction's
+     * {@code afterCommit} synchronization callback, guaranteed by Spring to run only once that outer
+     * transaction has durably committed.
+     *
+     * <p><b>Accepted tradeoff:</b> if the process crashes in the (very small) window between the
+     * outer transaction's commit and this {@code afterCommit} callback actually running the claim
+     * insert, the message will be reprocessed on redelivery (since {@code existsById} will still say
+     * "not seen"). That reprocessing attempt re-runs {@code transitionFromPending}, which is a no-op
+     * race guard (0 rows updated, since the booking already left {@code PENDING}) — so the redelivery
+     * safely takes the early-return branch and claims the message then, rather than double-mutating
+     * seats or double-publishing. This loud-and-narrow reprocessing is preferred over the old
+     * claim-before-work failure mode, which was silent and unbounded (the booking would sit orphaned
+     * forever).
+     */
+    private void claimMessageAfterCommit(UUID messageId, Long bookingId) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                if (!tryClaimMessage(messageId)) {
+                    log.warn("Post-commit idempotency claim for messageId={} bookingId={} lost a race — "
+                            + "a concurrent redelivery of the same messageId already claimed it after this "
+                            + "call's business work had already committed", messageId, bookingId);
+                }
+            }
+        });
     }
 
     /**

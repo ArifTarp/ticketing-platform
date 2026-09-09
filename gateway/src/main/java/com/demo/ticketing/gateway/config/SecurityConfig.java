@@ -55,6 +55,11 @@ public class SecurityConfig {
                 .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
                 .logout(ServerHttpSecurity.LogoutSpec::disable)
                 .authorizeExchange(exchanges -> exchanges
+                        // CORS preflight requests are plain browser-generated OPTIONS calls that
+                        // never carry an Authorization header (the spec forbids it), so gating
+                        // OPTIONS behind JWT auth would make every cross-origin preflight fail
+                        // with 401 and the browser would never even attempt the real request.
+                        // This permitAll() is not redundant with globalcors — do not remove it.
                         .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .pathMatchers(PUBLIC_PATHS).permitAll()
                         .anyExchange().authenticated())

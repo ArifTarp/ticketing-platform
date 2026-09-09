@@ -47,5 +47,15 @@ implementation.
 - `services/booking/.../SagaCompletionService`'s idempotency claim must be retrofitted to the
   REQUIRES_NEW pattern for consistency, and the claim-commit-ordering bug (committing the claim
   before the business logic succeeds) must be fixed in payment and notification.
+- **Update (code review pass):** `SagaCompletionService` had the exact same claim-before-work
+  ordering bug as payment/notification — it already used the REQUIRES_NEW `tryClaimMessage` pattern
+  above, but `onCompleted`/`onFailed` called it *first*, before `transitionFromPending`/`markSold`/
+  `releaseSeat`/`upsertSagaState` ran in the same outer transaction. A failure partway through that
+  business logic rolled back the transition/seat/SagaState work but left the claim durably committed
+  (it runs in its own transaction), permanently skipping the message on redelivery and leaving the
+  booking stuck `PENDING` with seats stuck `HELD` forever. This has been fixed to the same
+  claim-after-commit pattern as payment/notification (`claimMessageAfterCommit`, hooking
+  `TransactionSynchronization.afterCommit`) — this ADR's list above of services needing the
+  ordering fix is now fully closed out (payment, notification, and booking all follow it).
 - This ADR is the canonical reference; per-service `CLAUDE.md` files should link here instead of
   re-explaining the rationale.

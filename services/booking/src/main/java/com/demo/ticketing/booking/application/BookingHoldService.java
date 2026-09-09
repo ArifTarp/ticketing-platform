@@ -14,6 +14,9 @@ import com.demo.ticketing.booking.infra.redis.SeatHoldLockService;
 import com.demo.ticketing.booking.web.dto.BookingResponse;
 import com.demo.ticketing.booking.web.dto.HoldBookingRequest;
 import com.demo.ticketing.booking.web.dto.HoldSeatRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -43,8 +46,18 @@ import java.util.UUID;
 @Service
 public class BookingHoldService {
 
+    private static final Logger log = LoggerFactory.getLogger(BookingHoldService.class);
+
     /** business-rules.md: max 6 seats per booking, enforced cumulatively per ADR-0004. */
     private static final int MAX_SEATS_PER_BOOKING = 6;
+
+    /**
+     * Bound on the ADR-0004 TOCTOU retry loop (see {@link #persistHoldWithRetry}). One retry
+     * resolves the realistic case (a single concurrent competitor for the same
+     * {@code (userId, eventId)} pair); a small bound beyond that only guards against pathological
+     * repeated contention rather than looping forever.
+     */
+    private static final int MAX_PENDING_BOOKING_INSERT_ATTEMPTS = 5;
 
     private final BookingRepository bookingRepository;
     private final SeatAvailabilityRepository seatAvailabilityRepository;
@@ -82,7 +95,7 @@ public class BookingHoldService {
                 }
                 acquiredSeatIds.add(seatId);
             }
-            Booking booking = transactionTemplate.execute(status -> persistHold(request));
+            Booking booking = persistHoldWithRetry(request);
             return bookingMapper.toResponse(booking);
         } catch (SeatUnavailableException ex) {
             // Whole-request rollback per business-rules.md's concurrent seat-race path: release
@@ -103,6 +116,47 @@ public class BookingHoldService {
             throw new InvalidHoldRequestException("Duplicate seatId within the same hold request");
         }
         return List.copyOf(distinct);
+    }
+
+    /**
+     * Runs {@link #persistHold} inside its own fresh transaction via {@link #transactionTemplate},
+     * retrying (with a fresh find-or-create lookup, not a naive re-run of the same failed insert)
+     * when a concurrent request for the same {@code (userId, eventId)} pair wins the DB-level race
+     * guard added for this bug fix: a partial unique index, {@code uq_bookings_user_event_pending}
+     * on {@code bookings(user_id, event_id) WHERE status = 'PENDING'} (see the new Flyway
+     * migration). {@link #persistHold}'s find-then-create check on
+     * {@code findFirstByUserIdAndEventIdAndStatus} is a classic TOCTOU race: the Redis lock only
+     * serializes concurrent holds per {@code (eventId, seatId)}, never per {@code (userId,
+     * eventId)}, so two concurrent hold requests for two <em>different</em> seats from the same
+     * user/event can each see "no existing PENDING booking" before either's INSERT commits and each
+     * try to create their own separate one-seat booking — silently defeating ADR-0004's whole point.
+     *
+     * <p>The DB index makes the loser's {@code bookingRepository.save(booking)} call (IDENTITY
+     * generation forces an immediate, synchronous {@code INSERT}) fail with a unique-violation,
+     * translated by Spring Data to {@link DataIntegrityViolationException}. {@link TransactionTemplate}
+     * has already rolled back that attempt's entire transaction (including any {@code
+     * SeatAvailability} rows marked {@code HELD} earlier in the same attempt) by the time this
+     * catches the exception, so retrying in a brand-new transaction is safe: this request's Redis
+     * locks are still held (unaffected by the DB rollback), and the retry's fresh
+     * {@code findFirstByUserIdAndEventIdAndStatus} lookup now sees the winner's already-committed
+     * booking and appends this request's seat(s) to it — the loser ends up correctly merged into one
+     * shared multi-seat booking instead of the request failing outright.
+     */
+    private Booking persistHoldWithRetry(HoldBookingRequest request) {
+        for (int attempt = 1; attempt <= MAX_PENDING_BOOKING_INSERT_ATTEMPTS; attempt++) {
+            try {
+                return transactionTemplate.execute(status -> persistHold(request));
+            } catch (DataIntegrityViolationException raceLoss) {
+                if (attempt == MAX_PENDING_BOOKING_INSERT_ATTEMPTS) {
+                    throw raceLoss;
+                }
+                log.info("Lost the (userId={}, eventId={}) PENDING-booking race on attempt {}, retrying "
+                                + "against the winner's now-committed booking",
+                        request.userId(), request.eventId(), attempt);
+            }
+        }
+        // Unreachable: the loop above always either returns or throws on its last attempt.
+        throw new IllegalStateException("persistHoldWithRetry exhausted attempts without returning or throwing");
     }
 
     /**

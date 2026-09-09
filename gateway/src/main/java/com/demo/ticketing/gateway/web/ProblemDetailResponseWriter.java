@@ -60,13 +60,22 @@ public class ProblemDetailResponseWriter {
         return response.writeWith(Mono.just(buffer));
     }
 
+    /**
+     * Idempotent by design: {@code CorsWebFilter} (globalcors) runs ahead of route-level
+     * handlers in the WebFlux chain and may already have stamped these same headers onto the
+     * exchange before an authentication/access-denied handler ever runs — plausible in
+     * particular on any path that also touches the fallback forward. Using {@code set(...)}
+     * rather than {@code add(...)} guarantees a single value per header either way; a response
+     * with two {@code Access-Control-Allow-Origin} values is rejected outright by browsers per
+     * the Fetch/CORS spec, which would silently defeat this entire class's purpose.
+     */
     private void addCorsHeaders(ServerWebExchange exchange, ServerHttpResponse response) {
         String origin = exchange.getRequest().getHeaders().getOrigin();
         if (origin != null && allowedOrigin.equals(origin)) {
-            response.getHeaders().add("Access-Control-Allow-Origin", origin);
-            response.getHeaders().add("Access-Control-Allow-Credentials", "true");
-            response.getHeaders().add("Access-Control-Allow-Headers", "Content-Type, Authorization");
-            response.getHeaders().add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+            response.getHeaders().set("Access-Control-Allow-Origin", origin);
+            response.getHeaders().set("Access-Control-Allow-Credentials", "true");
+            response.getHeaders().set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+            response.getHeaders().set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
         }
     }
 }

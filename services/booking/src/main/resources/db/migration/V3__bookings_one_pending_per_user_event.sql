@@ -1,0 +1,15 @@
+-- Code review fix for ADR-0004: BookingHoldService.persistHold looks up an existing PENDING
+-- booking for (user_id, event_id) and appends to it instead of always creating a new one, but that
+-- find-then-create check is a classic TOCTOU race. The Redis distributed lock
+-- (SeatHoldLockService) only serializes concurrent holds per (eventId, seatId), never per
+-- (userId, eventId) -- two concurrent POST /bookings/hold calls for two *different* seats from the
+-- same user/event can each run the find-or-create check before either INSERT commits, both see "no
+-- existing PENDING booking," and each create their own separate one-seat PENDING booking instead of
+-- one shared multi-seat booking, silently defeating ADR-0004.
+--
+-- A partial unique index gives the DB the final say: at most one PENDING booking can ever exist per
+-- (user_id, event_id). The loser's INSERT fails with a unique-violation, which
+-- BookingHoldService.persistHoldWithRetry catches and retries -- the retry's find-or-create check
+-- now sees the winner's already-committed booking and appends its seat(s) to it instead of failing
+-- the request.
+CREATE UNIQUE INDEX uq_bookings_user_event_pending ON bookings (user_id, event_id) WHERE status = 'PENDING';
