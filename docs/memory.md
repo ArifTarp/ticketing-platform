@@ -28,13 +28,23 @@ was followed.
 
 ## Current state (as of 2026-09-09)
 
-**Phases 1–13 (the full vertical slice, backend + frontend) are complete and committed**, plus a
-post-Phase-8/9/12 review-and-fix pass, a gateway CORS fix, and — landed later this same day — a
+**All 14 phases in `docs/roadmap.md` (1 through 14) are now complete and committed** — the full
+vertical slice (register/login → browse → hold seats → pay (mock) → confirmed booking +
+notification, with the saga and timeout path) plus the optional/last Phase 14 admin screens
+(venue/event CRUD, ADMIN-role-gated end to end: gateway route authorization, backend endpoints,
+`/admin/events` frontend). This is a meaningful milestone: every phase named in the roadmap has
+shipped. Current HEAD is `7f3a3e7`. See the "Phase 14 — Admin screens" entry below for details.
+Before calling the project fully "production-demo-polished" there are still three open items, none
+of which block calling the roadmap complete: the Playwright E2E decision (still unmade — see "Next
+up"), and two small, documented Phase 14 scope limits (no venue-listing GET endpoint, no
+event-edit PUT/PATCH endpoint) that are optional follow-up, not defects.
+
+Immediately prior to Phase 14: a post-Phase-8/9/12 review-and-fix pass, a gateway CORS fix, and a
 saga/gateway review-and-fix pass (`2455d31`) followed by a targeted bug fix from that pass's own
-review agents (`7d67ccc`). Current HEAD is `7d67ccc`. See the "Saga idempotency, pending-booking
-race, and CORS header-dup fix + review pass" entry below for details; the repo-root `NOTLAR.txt`
-scratch file that tracked this in-progress work across sessions has been superseded by this log
-entry and should be treated as stale/deletable going forward. Phase 3 (auth) landed in `7dff70f`,
+review agents (`7d67ccc`), then logged in commit `85454f8`. See the "Saga idempotency,
+pending-booking race, and CORS header-dup fix + review pass" entry below for details; the repo-root
+`NOTLAR.txt` scratch file that tracked this in-progress work across sessions has been superseded by
+this log entry and should be treated as stale/deletable going forward. Phase 3 (auth) landed in `7dff70f`,
 Phase 5 (event catalog) in `62091ee`, Phase 4 (gateway with JWT validation) in `8a47d93`, Phase 6
 (Kafka topics & DTO scaffolding) in `d35012b`, Phase 7 (booking CRUD + Redis seat holds) in
 `abb2de4`, a gateway fix wiring up booking and event routes in `f7d9030`, Phase 8 (payment mock +
@@ -49,13 +59,15 @@ log entry (verified via `git status`) except for this file itself. Note: commit 
 named — it only logged the prior Phase 8/9/12 review-and-fix pass (commit `555c75f`), not Phase 13
 itself (`66a5ff3`), which had no dedicated "What's done" entry until this log update.
 
-**Top open item: Playwright is still not set up anywhere in this repo** — confirmed again this
-session (no `playwright.config.*`, no `e2e/` folder, no `@playwright/test` in
-`frontend/package.json`). This has now been flagged since Phase 12, carried through Phase 13's
-shipping without being acted on, despite `docs/roadmap.md` naming a full Playwright E2E suite
-(happy path, force-fail, TTL-expiry, two-tab seat race) as "the definition of done for the vertical
-slice." **No agent has yet made the call on scaffold-now vs. explicitly-defer** — that decision is
-the next concrete thing to do, before Phase 14 (admin, optional/last per the roadmap).
+**Top open item: Playwright is still not set up anywhere in this repo** — not re-verified during
+the Phase 14 session (Phase 14 didn't touch frontend test tooling), but nothing since the last
+confirmed check (no `playwright.config.*`, no `e2e/` folder, no `@playwright/test` in
+`frontend/package.json`) suggests it changed. This has now been flagged since Phase 12, carried
+through Phase 13 and now Phase 14 shipping without being acted on, despite `docs/roadmap.md` naming
+a full Playwright E2E suite (happy path, force-fail, TTL-expiry, two-tab seat race) as "the
+definition of done for the vertical slice." **No agent has yet made the call on scaffold-now vs.
+explicitly-defer** — with all 14 roadmap phases now built, this is the single biggest remaining gap
+before the demo can be called fully done.
 
 Local toolchain is installed and working on this machine (see "Environment" below) — a fresh
 session does not need to reinstall anything, just re-verify with the commands in that section. One
@@ -744,7 +756,64 @@ race-loss catch and stop Redis lock leak on retry exhaustion":
   `DataIntegrityViolationException` (500 problem+json) — previously that class had no handler at
   all and fell through to Spring Boot's default (non-problem+json) error body.
 
-Commits: `2455d31`, `7d67ccc`.
+Commits: `2455d31`, `7d67ccc`. Logged in commit `85454f8`.
+
+### Phase 14 — Admin screens: venue/event CRUD, ADMIN-gated (2026-09-09)
+
+Committed as `7f3a3e7`. Built across 5 sequential/parallel agent passes this session (backend,
+gateway, frontend, plus a mid-implementation fix pass). Marked "optional, build last if time
+allows" in `docs/roadmap.md`; with this phase done, **all 14 roadmap phases are now complete**.
+
+- **Backend (`services/event`)**: three new endpoints — `POST /api/v1/venues`
+  (`{name,address,city}` → 201 `VenueResponse`), `POST /api/v1/events`
+  (`{venueId,title,description,startsAt,status}`, status optional/defaults `DRAFT` → 201, reuses
+  the existing event-detail DTO shape), `POST /api/v1/events/{eventId}/seat-categories` (array of
+  `{name,price,section}` → 201 array of created tiers; 409 on a name/section already used by that
+  event). None of the three do local JWT/role validation — same deferral precedent booking already
+  uses for `userId`; they trust the gateway to reject non-ADMIN callers first.
+- **Real gap found and fixed mid-implementation**: the admin event table needs to list events of
+  ALL statuses, but the existing public `GET /api/v1/events` is hardcoded ON_SALE-only by design
+  (for public browsing) with no status filter param. Rather than adding a query-param escape hatch
+  — which would leak DRAFT events to unauthenticated callers, since Spring Security route matching
+  is path+method based, not query-param based — a new, separate `GET /api/v1/admin/events` endpoint
+  was added on its own path prefix specifically so the gateway can role-gate it by path. The public
+  `GET /api/v1/events` is completely unchanged. **This is the reusable pattern for any future
+  admin-only variant of an existing public read**: a distinct path, not a param, so the gateway can
+  gate on path alone.
+- **Gateway**: new routes `/api/v1/venues/**` and `/api/v1/admin/**` (both → the event service),
+  same CircuitBreaker+Retry shape as existing routes. A `JwtAuthenticationConverter` (new, in
+  `GatewayJwtConfig`) now maps the JWT's `roles` claim to `ROLE_*` Spring Security authorities —
+  this is new; before Phase 14 the gateway did no role mapping at all (its `CLAUDE.md` previously
+  said "No role checks live here yet"). `SecurityConfig` now requires `hasRole("ADMIN")` on
+  `POST /api/v1/events/**`, `POST /api/v1/venues/**`, and `GET /api/v1/admin/**`;
+  `GET /api/v1/events/**` stays public. **Load-bearing ordering detail**: the ADMIN
+  `pathMatchers` rules are declared before the broader public-path rules in `authorizeExchange`,
+  because Spring Security evaluates these in declaration order and takes the first match — this
+  ordering is the crux of the whole feature working correctly at all and is called out with an
+  explicit comment both in `SecurityConfig` and in `gateway/CLAUDE.md`'s route table. Get this
+  ordering wrong in a future edit and every admin route silently falls through to "public."
+- **Frontend**: `/admin/events` implementing `docs/user-flow.md`'s full Screen 8 spec —
+  `AdminGuard` (role-gates the whole route from the JWT roles `useAuth()` already decodes; no admin
+  API call ever fires for a non-ADMIN/logged-out user), `AdminTabs`, `EventTable` (backed by the
+  new `GET /api/v1/admin/events`), `EventForm` with inline venue creation (`VenueSelect` +
+  `VenueMiniForm`) and `SeatCategoryList`, all through a new `lib/adminApi.ts`. An "Admin" nav link
+  was added, visible only to ADMIN-role users.
+- **Two deliberate, documented scope limits (not silently worked around)**: (1) there is no
+  `GET /api/v1/venues` listing endpoint (only `POST` exists), so `VenueSelect`'s dropdown is
+  session-scoped — only venues created this session or already attached to the event being edited
+  appear; (2) there is no `PUT`/`PATCH /api/v1/events/{id}` endpoint, so "Edit" on an existing event
+  shows its fields read-only with an inline notice and only allows adding new seat categories, not
+  editing the event itself. Both are flagged in-code and in the UI itself, and are good candidates
+  for a future small backend pass if admin editing needs to become fully functional — neither
+  blocks Phase 14 being considered done, since the roadmap only requires
+  `POST /venues`, `POST /events`, `POST /events/{id}/seat-categories`, ADMIN-gated, plus the
+  `/admin/events` frontend, all of which are delivered.
+- **Verification**: `mvn -pl services/event -am test` → 33 tests, `mvn -pl gateway -am test` → 39
+  tests, both 0 failures (Docker/Testcontainers-backed for event). Frontend: `npx tsc --noEmit`
+  clean, `pnpm test` (Vitest) 57/57 passing, `npx eslint` clean. **Not done**: no Playwright/E2E run
+  (Playwright is still not set up in this repo at all — see "Current state" and "Next up"), and no
+  live manual browser walkthrough of the new admin screens.
+- Commit: `7f3a3e7`.
 
 ## Environment (this machine)
 
@@ -822,22 +891,29 @@ reinstall, unless one of these checks fails:
     green multi-module run: `./mvnw -pl gateway,services/auth,services/event test` → 42/42 tests,
     `BUILD SUCCESS`.
 
-## Next up: decide Playwright (scaffold vs. defer), then Phase 14 (admin, optional/last)
+## Next up: decide Playwright (scaffold vs. defer) — last open item after all 14 roadmap phases
 
-**Phases 1–13 are all done, plus the 2026-09-09 saga/gateway review-and-fix pass above (HEAD is
-`7d67ccc`).** The next real decision, not yet made by any agent, is **Playwright**:
-scaffold the E2E suite now, or make an explicit, logged decision to defer it further. This has been
-flagged since Phase 12, was still open through Phase 13 shipping, and remains the top item —
+**All 14 phases in `docs/roadmap.md` are now done, including Phase 14 (admin screens, HEAD is
+`7f3a3e7`).** With every named phase complete, the single remaining real decision, not yet made by
+any agent, is **Playwright**: scaffold the E2E suite now, or make an explicit, logged decision to
+defer it further/indefinitely (e.g. as an out-of-scope stretch item for this demo). This has been
+flagged since Phase 12, carried through Phase 13 and Phase 14 shipping without being acted on —
 `docs/roadmap.md` calls a full Playwright suite (happy path, force-fail payment, short-TTL expiry,
-two-tab seat race) "the definition of done for the vertical slice." Confirmed again this session:
-still zero trace of Playwright anywhere in the repo (no `playwright.config.*`, no `e2e/` folder, no
-`@playwright/test` dependency in `frontend/package.json`). Whoever picks this up next should not
-silently proceed to Phase 14 without addressing this — either scaffold it or log the explicit
-deferral decision and rationale here.
+two-tab seat race) "the definition of done for the vertical slice." As of the last confirmed check
+(Phase 13 session), there was zero trace of Playwright anywhere in the repo (no
+`playwright.config.*`, no `e2e/` folder, no `@playwright/test` dependency in
+`frontend/package.json`); not re-verified during the Phase 14 session since that work didn't touch
+frontend test tooling. Whoever picks this up next should not let it keep silently carrying
+forward — either scaffold it or log the explicit deferral decision and rationale here.
 
-**After that decision is made, Phase 14 (admin: events screen) is next per the roadmap** — it's
-named optional/last-in-build-order there, so it's reasonable to defer it further if Playwright is
-prioritized instead, but it should be a deliberate choice, not an oversight.
+**Also optional follow-up, not blocking, from Phase 14** (see that entry above for full detail):
+adding `GET /api/v1/venues` (listing) and `PUT`/`PATCH /api/v1/events/{id}` (editing) endpoints
+would let the admin frontend drop its two documented workarounds (session-scoped venue dropdown,
+read-only event edit). Small, well-scoped, safe to pick up whenever.
+
+**Stretch/beyond-roadmap candidate, not yet started**: OpenTelemetry → Elastic observability, named
+in root `CLAUDE.md`'s tech stack but not tied to any specific roadmap phase — worth a decision on
+whether it's in scope for this demo at all before someone assumes it's expected.
 
 Preconditions/reminders for whoever picks this up:
 - Remember this machine's port-8080 conflict (pre-existing Windows `Tomcat10.exe`) if running the
@@ -847,11 +923,16 @@ Preconditions/reminders for whoever picks this up:
 - `fetchMyBookings()`'s JWT-`sub`-decoding gap (flagged by Phase 10) is also now **resolved** — it
   was implemented as part of Phase 13's `/tickets` screen.
 
-**Carried-forward, lower priority, reviewed again this session and judged non-blocking (documented
-demo-scope simplifications, not action items)**:
+**Carried-forward, lower priority, reviewed again in the 2026-09-09 saga/gateway pass and judged
+non-blocking (documented demo-scope simplifications, not action items)**:
 - The price-is-client-supplied gap from Phase 7 (`HoldSeatRequest.price` is caller-supplied, not
   fetched from event) is still open — flagged for `workflow-rules`/`backend-architecture`, likely
   needs a Kafka-published price-tier snapshot event to close properly.
 - Phase 5's event-catalog modeling decision — price tiers attach to seats by venue **section**, not
   per-seat (`UNIQUE(event_id, section)` on `seat_categories`) — is still unratified by
   `workflow-rules`.
+- The gateway `BookingRouteTest` cross-test-interference flakiness (see the "Saga idempotency..."
+  entry above) — still unresolved, still low priority.
+- The outbox-durability gap (`SagaCompletionService`'s `afterCommit` listener has no interaction
+  with `KafkaOutboxPublisher`'s durability — no durable outbox table/relay yet) — still a future-ADR
+  candidate, not urgent.
