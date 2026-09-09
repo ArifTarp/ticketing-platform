@@ -194,6 +194,94 @@ class EventRouteTest {
     }
 
     @Test
+    void putEventsWithoutTokenIsRejectedWith401AndNeverReachesEvent() {
+        int before = EVENT_STUB.getRequestCount();
+
+        client.put().uri("/api/v1/events/1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"title\":\"Rock Night (rescheduled)\"}")
+                .exchange()
+                .expectStatus().isUnauthorized()
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON);
+
+        assertThat(EVENT_STUB.getRequestCount() - before).isZero();
+    }
+
+    @Test
+    void putEventsWithUserRoleTokenIsForbiddenAndNeverReachesEvent() {
+        int before = EVENT_STUB.getRequestCount();
+
+        client.put().uri("/api/v1/events/1")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestJwt.valid())
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"title\":\"Rock Night (rescheduled)\"}")
+                .exchange()
+                .expectStatus().isForbidden()
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON);
+
+        assertThat(EVENT_STUB.getRequestCount() - before).isZero();
+    }
+
+    @Test
+    void putEventsWithAdminRoleTokenIsForwardedToEvent() throws InterruptedException {
+        EVENT_STUB.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"id\":1,\"title\":\"Rock Night (rescheduled)\"}"));
+
+        client.put().uri("/api/v1/events/1")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestJwt.validAdmin())
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"title\":\"Rock Night (rescheduled)\"}")
+                .exchange()
+                .expectStatus().isOk();
+
+        RecordedRequest forwarded = EVENT_STUB.takeRequest();
+        assertThat(forwarded.getMethod()).isEqualTo("PUT");
+        assertThat(forwarded.getPath()).isEqualTo("/api/v1/events/1");
+        assertThat(forwarded.getBody().readUtf8()).isEqualTo("{\"title\":\"Rock Night (rescheduled)\"}");
+    }
+
+    @Test
+    void deleteEventsWithoutTokenIsRejectedWith401AndNeverReachesEvent() {
+        int before = EVENT_STUB.getRequestCount();
+
+        client.delete().uri("/api/v1/events/1")
+                .exchange()
+                .expectStatus().isUnauthorized()
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON);
+
+        assertThat(EVENT_STUB.getRequestCount() - before).isZero();
+    }
+
+    @Test
+    void deleteEventsWithUserRoleTokenIsForbiddenAndNeverReachesEvent() {
+        int before = EVENT_STUB.getRequestCount();
+
+        client.delete().uri("/api/v1/events/1")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestJwt.valid())
+                .exchange()
+                .expectStatus().isForbidden()
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON);
+
+        assertThat(EVENT_STUB.getRequestCount() - before).isZero();
+    }
+
+    @Test
+    void deleteEventsWithAdminRoleTokenIsForwardedToEvent() throws InterruptedException {
+        EVENT_STUB.enqueue(new MockResponse().setResponseCode(204));
+
+        client.delete().uri("/api/v1/events/1")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestJwt.validAdmin())
+                .exchange()
+                .expectStatus().isNoContent();
+
+        RecordedRequest forwarded = EVENT_STUB.takeRequest();
+        assertThat(forwarded.getMethod()).isEqualTo("DELETE");
+        assertThat(forwarded.getPath()).isEqualTo("/api/v1/events/1");
+    }
+
+    @Test
     void idempotentGetIsRetriedOnServerError() throws InterruptedException {
         int before = EVENT_STUB.getRequestCount();
         EVENT_STUB.enqueue(new MockResponse().setResponseCode(500));

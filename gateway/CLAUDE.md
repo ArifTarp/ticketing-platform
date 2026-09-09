@@ -29,6 +29,8 @@ bookings, seats or payments, that task belongs in a service.
 | `/api/v1/auth/**`   | any       | `${services.auth.uri}` (8081)  | **open** | 3/4   |
 | `GET /api/v1/events/**` | GET   | `${services.event.uri}` (8082) | **open** | 5/7 |
 | `POST /api/v1/events/**` | POST | `${services.event.uri}` (8082) | JWT + `ADMIN` role | 14 |
+| `PUT /api/v1/events/{eventId}` | PUT | `${services.event.uri}` (8082) | JWT + `ADMIN` role | 14 |
+| `DELETE /api/v1/events/{eventId}` | DELETE | `${services.event.uri}` (8082) | JWT + `ADMIN` role | 14 |
 | `POST /api/v1/venues/**` | POST | `${services.event.uri}` (8082) | JWT + `ADMIN` role | 14 |
 | `GET /api/v1/admin/**` | GET   | `${services.event.uri}` (8082) | JWT + `ADMIN` role | 14 |
 | `/api/v1/bookings/**` | any     | `${services.booking.uri}` (8083) | JWT required | 7 |
@@ -44,17 +46,20 @@ Not yet routed:
 `GET /api/v1/events/**` is public because event's catalog reads need no login
 (`services/event/CLAUDE.md`: "No security/JWT. The catalog reads are public."). Phase 14 added
 admin write endpoints under the same `/api/v1/events/**` prefix (`POST /events`,
-`POST /events/{id}/seat-categories`) plus a brand-new `POST /api/v1/venues` — both routed to the
-same `${services.event.uri}` target (event owns venues too) and gated to the `ADMIN` role in
-`SecurityConfig` (`.pathMatchers(HttpMethod.POST, ...).hasRole("ADMIN")`, declared *before* the
-`GET`-only public rule so it isn't short-circuited — see the ordering comment in
+`POST /events/{id}/seat-categories`, and later `PUT /events/{eventId}` /
+`DELETE /events/{eventId}` for the admin edit/delete screen) plus a brand-new `POST /api/v1/venues`
+— all routed to the same `${services.event.uri}` target (event owns venues too) and gated to the
+`ADMIN` role in `SecurityConfig` (`.pathMatchers(HttpMethod.POST, ...).hasRole("ADMIN")`,
+`.pathMatchers(HttpMethod.PUT, EVENTS_PATH).hasRole("ADMIN")`,
+`.pathMatchers(HttpMethod.DELETE, EVENTS_PATH).hasRole("ADMIN")`, each declared *before* the
+`GET`-only public rule so none of them is short-circuited — see the ordering comment in
 `SecurityConfig`). The `roles` JWT claim is mapped to `ROLE_*` `GrantedAuthority`s by a
 `JwtAuthenticationConverter` in `GatewayJwtConfig`. `services/event/CLAUDE.md` still says "No
-security/JWT" for the service itself — these three endpoints deliberately have **no** local
-JWT/role validation at all and trust the gateway to reject non-ADMIN callers before the request
-ever arrives (the same deferral precedent `booking` uses for its own JWT-avoidance elsewhere).
-That makes the gateway's `ADMIN` check the only enforcement of "Only ADMIN may create/update
-venues and events" (`docs/business-rules.md`) for these three endpoints — do not weaken it.
+security/JWT" for the service itself — these endpoints deliberately have **no** local JWT/role
+validation at all and trust the gateway to reject non-ADMIN callers before the request ever
+arrives (the same deferral precedent `booking` uses for its own JWT-avoidance elsewhere). That
+makes the gateway's `ADMIN` check the only enforcement of "Only ADMIN may create/update venues and
+events" (`docs/business-rules.md`) for these endpoints — do not weaken it.
 
 Phase 14 also added `GET /api/v1/admin/events`, a separate prefix routed to the same
 `${services.event.uri}` target, for the admin screen's table of events across **all** statuses
@@ -98,12 +103,15 @@ Paths are forwarded **verbatim** (no `StripPrefix`): services map their controll
   `HttpMethod.GET`-scoped `permitAll()` for `/api/v1/events/**` (kept out of the plain string array
   on purpose — see below); everything else is `authenticated()`.
 - Role-based rules (`hasRole("ADMIN")`) arrived with the admin routes in Phase 14: `POST` on
-  `/api/v1/events/**` and `/api/v1/venues/**` requires the `ADMIN` role. These `pathMatchers` calls
+  `/api/v1/events/**` and `/api/v1/venues/**` requires the `ADMIN` role, and so do `PUT`/`DELETE`
+  on `/api/v1/events/**` (added for the admin edit/delete-event screen). These `pathMatchers` calls
   are declared **before** the `GET`-only public rule and before `PUBLIC_PATHS`' `permitAll()` in
   `authorizeExchange` — Spring Security evaluates rules in declaration order and stops at the first
   match, so a path-based `permitAll()` on `/api/v1/events/**` would otherwise short-circuit before
-  the role check ever runs. The 403 handler for `hasRole` failures is wired and tested
-  (`ProblemDetailAccessDeniedHandler`).
+  the role check ever runs (and any new HTTP method on `/api/v1/events/**` without its own explicit
+  rule here silently falls through to `anyExchange().authenticated()` — any logged-in user, not
+  just admins — so every new admin-only method on this prefix needs its own `pathMatchers` line).
+  The 403 handler for `hasRole` failures is wired and tested (`ProblemDetailAccessDeniedHandler`).
 
 ## Resilience4j
 
@@ -164,9 +172,10 @@ wired in through `@DynamicPropertySource` overriding `services.auth.uri`.
   5xx, `GET` retried — same pattern as the auth tests, against `services.booking.uri`.
 - `EventRouteTest` — event route public for `GET` (no token needed to reach it), path/query
   forwarded verbatim, `Authorization` header forwarded unchanged when present with no invented
-  identity headers, `GET` retried on 5xx — plus (Phase 14) `POST /events` and
-  `POST /events/{id}/seat-categories`: 401 with no token, 403 with a `USER`-role token, forwarded
-  verbatim with an `ADMIN`-role token — against `services.event.uri`.
+  identity headers, `GET` retried on 5xx — plus (Phase 14) `POST /events`,
+  `POST /events/{id}/seat-categories`, `PUT /events/{eventId}` and `DELETE /events/{eventId}`: 401
+  with no token, 403 with a `USER`-role token, forwarded verbatim with an `ADMIN`-role token —
+  against `services.event.uri`.
 - `VenueRouteTest` (Phase 14) — same three-case pattern (401/403/forwarded) for
   `POST /api/v1/venues` against `services.event.uri` (venues and events share the event service).
 - `AdminEventRouteTest` (Phase 14) — same three-case pattern (401/403/forwarded verbatim

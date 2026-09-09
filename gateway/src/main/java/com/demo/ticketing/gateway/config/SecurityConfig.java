@@ -17,9 +17,10 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
  * <p>Deny-by-default — a new route added in a later phase is protected unless it is explicitly
  * listed in {@link #PUBLIC_PATHS}. Phase 14 adds the first role check: {@code POST} on the event
  * catalog's write endpoints and on venues requires the {@code ADMIN} role (see
- * {@code docs/business-rules.md}: "Only ADMIN may create/update venues and events"). The
- * {@code roles} JWT claim is mapped to {@code ROLE_*} authorities by
- * {@link GatewayJwtConfig#jwtAuthenticationConverter()}.
+ * {@code docs/business-rules.md}: "Only ADMIN may create/update venues and events"). {@code PUT}
+ * and {@code DELETE} on the event catalog (edit/delete an event, for the admin event-management
+ * screen) require {@code ADMIN} too, for the same reason. The {@code roles} JWT claim is mapped to
+ * {@code ROLE_*} authorities by {@link GatewayJwtConfig#jwtAuthenticationConverter()}.
  */
 @Configuration
 @EnableWebFluxSecurity
@@ -68,12 +69,19 @@ public class SecurityConfig {
                         // This permitAll() is not redundant with globalcors — do not remove it.
                         .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // Order matters: authorizeExchange evaluates rules in declaration order and
-                        // stops at the first match. The ADMIN-gated POST rules for events/venues
-                        // must come BEFORE the GET-only public-catalog rule and PUBLIC_PATHS'
-                        // permitAll(), otherwise a blanket path-based permitAll() on
+                        // stops at the first match. The ADMIN-gated POST/PUT/DELETE rules for
+                        // events/venues must come BEFORE the GET-only public-catalog rule and
+                        // PUBLIC_PATHS' permitAll(), otherwise a blanket path-based permitAll() on
                         // /api/v1/events/** would short-circuit before the role check ever runs and
-                        // a POST would sail through unauthenticated.
+                        // a POST/PUT/DELETE would sail through unauthenticated (or, worse, only
+                        // require anyExchange().authenticated() — any logged-in non-admin user —
+                        // rather than ADMIN).
                         .pathMatchers(HttpMethod.POST, EVENTS_PATH, VENUES_PATH).hasRole("ADMIN")
+                        // event's admin CRUD screen also supports editing/deleting an event
+                        // (EventController: PUT/DELETE /api/v1/events/{eventId}) — these must be
+                        // gated exactly like POST above, same ordering reasoning.
+                        .pathMatchers(HttpMethod.PUT, EVENTS_PATH).hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.DELETE, EVENTS_PATH).hasRole("ADMIN")
                         // GET /api/v1/admin/events (all statuses, for the admin table) requires
                         // ADMIN too. Unlike the POST rule above, ordering relative to the other
                         // rules is not delicate here: /api/v1/admin/** does not overlap any
