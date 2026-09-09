@@ -28,16 +28,24 @@ was followed.
 
 ## Current state (as of 2026-09-09)
 
-**All 14 phases in `docs/roadmap.md` (1 through 14) are now complete and committed** — the full
-vertical slice (register/login → browse → hold seats → pay (mock) → confirmed booking +
-notification, with the saga and timeout path) plus the optional/last Phase 14 admin screens
-(venue/event CRUD, ADMIN-role-gated end to end: gateway route authorization, backend endpoints,
-`/admin/events` frontend). This is a meaningful milestone: every phase named in the roadmap has
-shipped. Current HEAD is `7f3a3e7`. See the "Phase 14 — Admin screens" entry below for details.
-Before calling the project fully "production-demo-polished" there are still three open items, none
-of which block calling the roadmap complete: the Playwright E2E decision (still unmade — see "Next
-up"), and two small, documented Phase 14 scope limits (no venue-listing GET endpoint, no
-event-edit PUT/PATCH endpoint) that are optional follow-up, not defects.
+**All 14 phases in `docs/roadmap.md` (1 through 14) are complete and committed, and — since this
+session — the app has also had a full visual redesign plus its first real Playwright E2E suite.**
+Current HEAD is `44a88e8`. The full vertical slice (register/login → browse → hold seats → pay
+(mock) → confirmed booking + notification, with the saga and timeout path) plus the admin screens
+(venue/event CRUD, ADMIN-gated) all ship under a new "control panel" dark/monospace-data-face
+design system (commit `b0dea0d`), and the long-standing "Playwright: scaffold or defer?" open item
+is now **resolved** — Playwright is set up with 8 real specs covering the golden path and the
+admin flow (commit `44a88e8`). Running that suite for real also caught and fixed **two genuine,
+pre-existing functional bugs** unrelated to the redesign: seat holds were being silently cleared
+immediately after every successful hold (`useCountdown` stale-state bug), and the admin "create
+venue inline while creating an event" path was completely broken (nested `<form>` HTML). See the
+"UI redesign + first real Playwright E2E suite" entry below for full detail.
+
+Remaining open items, none blocking: two small, documented Phase 14 scope limits (no venue-listing
+GET endpoint, no event-edit PUT/PATCH endpoint), the gateway `BookingRouteTest` flakiness, the
+outbox-durability ADR candidate, and a new item from this session — the E2E suite currently
+requires manually starting every backend service locally; there's no working `docker-compose`
+path for it yet (see "Next up").
 
 Immediately prior to Phase 14: a post-Phase-8/9/12 review-and-fix pass, a gateway CORS fix, and a
 saga/gateway review-and-fix pass (`2455d31`) followed by a targeted bug fix from that pass's own
@@ -54,20 +62,19 @@ screens 1-3) in `d78656c`, Phase 12 (frontend seat selection/checkout/confirmati
 `3e85aab`, a 4-agent review-and-fix pass across Phases 8/9/12 in `555c75f` (real saga-idempotency
 and seat-hold bugs found and fixed — see entries below), **Phase 13 (frontend `/tickets` — my
 bookings list + client-side QR) in `66a5ff3`**, and a **gateway CORS fix for the frontend origin in
-`529d287`/`e244d72`** (see the Phase 13 and CORS entries below). Working tree is clean as of this
-log entry (verified via `git status`) except for this file itself. Note: commit `55a8c00` ("docs: log Phase 13 my tickets completion") is misleadingly
+`529d287`/`e244d72`** (see the Phase 13 and CORS entries below). Note: commit `55a8c00` ("docs: log Phase 13 my tickets completion") is misleadingly
 named — it only logged the prior Phase 8/9/12 review-and-fix pass (commit `555c75f`), not Phase 13
-itself (`66a5ff3`), which had no dedicated "What's done" entry until this log update.
+itself (`66a5ff3`), which had no dedicated "What's done" entry until this log update. Phase 14
+(admin screens) landed in `7f3a3e7`, logged in `ec6c3d1`. Most recently, a full UI redesign landed
+in `b0dea0d` and the first real Playwright E2E setup (plus two bug fixes it uncovered) landed in
+`44a88e8` — see the "UI redesign + first real Playwright E2E suite" entry below. Working tree is
+clean as of this log entry (verified via `git status`) except for this file itself.
 
-**Top open item: Playwright is still not set up anywhere in this repo** — not re-verified during
-the Phase 14 session (Phase 14 didn't touch frontend test tooling), but nothing since the last
-confirmed check (no `playwright.config.*`, no `e2e/` folder, no `@playwright/test` in
-`frontend/package.json`) suggests it changed. This has now been flagged since Phase 12, carried
-through Phase 13 and now Phase 14 shipping without being acted on, despite `docs/roadmap.md` naming
-a full Playwright E2E suite (happy path, force-fail, TTL-expiry, two-tab seat race) as "the
-definition of done for the vertical slice." **No agent has yet made the call on scaffold-now vs.
-explicitly-defer** — with all 14 roadmap phases now built, this is the single biggest remaining gap
-before the demo can be called fully done.
+**RESOLVED this session (2026-09-09, commit `44a88e8`): Playwright is now set up and has real,
+working specs** — this had been flagged as the single biggest remaining gap since Phase 12,
+carried unresolved through Phase 13 and Phase 14. It is no longer an open item; see the "UI
+redesign + first real Playwright E2E suite" entry below. Do not keep carrying this forward as open
+in future "Current state"/"Next up" sections.
 
 Local toolchain is installed and working on this machine (see "Environment" below) — a fresh
 session does not need to reinstall anything, just re-verify with the commands in that section. One
@@ -815,6 +822,97 @@ allows" in `docs/roadmap.md`; with this phase done, **all 14 roadmap phases are 
   live manual browser walkthrough of the new admin screens.
 - Commit: `7f3a3e7`.
 
+### UI redesign + first real Playwright E2E suite (2026-09-09)
+
+Two commits, both this session, following on directly from Phase 14: `b0dea0d` (visual redesign)
+then `44a88e8` (Playwright setup + bug fixes it found).
+
+**Commit `b0dea0d` — full UI redesign, "control panel" design system.** The user asked for a full
+visual redesign of every frontend screen and explicitly delegated the creative direction ("tasarımı
+sana bırakıyorum... referans bul"), with two hard constraints: must **not** look like a generic
+music/concert/cinema ticketing app, must feel "futuristic tech company" (SpaceX/Linear/
+Vercel-dashboard-flavored) *without* an actual space theme, and must not break any existing
+functionality.
+
+- New design system: dark surfaces (`--bg`/`--surface`/`--surface-hover`), a single electric-cyan
+  accent (`--accent`) used sparingly, four semantic status colors
+  (`--status-live`/`-pending`/`-danger`/`-neutral`), small radii, hairline borders, and — the
+  signature move — a monospace face deliberately reused for anything data-shaped (prices, seat/
+  ticket ids, countdowns, statuses) via `.value-mono`/`.label-mono`, so the app reads as
+  instrumentation rather than a generic CRUD form. Tokens + a utility-class layer (`.panel`,
+  `.btn-*`, `.input-field`, `.status-dot`, `.bg-grid`) live in `frontend/app/globals.css`; fonts
+  became Space Grotesk (display) + Inter (body) + Geist Mono repurposed as the "data" face
+  (`frontend/app/layout.tsx`).
+- A new custom agent type was created for this pass, `.claude/agents/ui-designer.md`, now
+  registered for future sessions — it carries the full design brief so parallel restyle passes stay
+  consistent without re-explaining the system in every prompt.
+- Process: shared cross-cutting components (`NavBar`, `EmptyState`, `FormError`, `CountdownTimer`,
+  `EventStatusBadge`) were restyled centrally first (not delegated), so the four parallel
+  ui-designer passes that followed — auth screens; events catalog/detail + seat selection;
+  checkout/confirmation + tickets; admin — could consume them as-is without collisions. Each pass
+  was scoped to a disjoint file set and visual-only (className/decorative markup only, no hooks/
+  props/API changes).
+- A style-guide/mockup reference was published as a Claude Code Artifact (palette, type system,
+  component primitives, a mockup of each screen family), titled "Gate Control":
+  https://claude.ai/code/artifact/5afe0730-78ea-45ee-920b-e3b9bef45efa
+- Verified with `npx tsc --noEmit`, the full Vitest suite (57/57 — this repo's tests are all
+  pure-logic, no component-rendering tests, so this proved nothing broke at the type/logic level
+  but did **not** directly prove the UI still *works* in a browser — that only got proven by the
+  Playwright work in the next commit), `pnpm lint`, and a production `pnpm build`, all clean.
+
+**Commit `44a88e8` — first real Playwright E2E setup, plus two real bugs it found and fixed.** The
+user's next ask was to verify the redesign with Playwright. This project had never had Playwright
+actually set up before — it was named as a stack intent in root `CLAUDE.md` and had been an open,
+repeatedly-carried-forward decision in this log since Phase 12 (see the now-superseded "Top open
+item" paragraph in "Current state" history above). This commit resolves that decision by actually
+building it: added `@playwright/test`, `frontend/playwright.config.ts`, and `frontend/e2e/` (three
+spec files, 8 specs total).
+
+- To run the golden-path/admin specs against a real backend, the full stack was brought up locally
+  this session: `docker compose up -d postgres kafka kafka-topics-init redis` for infra, then
+  `auth`/`event`/`booking`/`payment`/`notification`/`gateway` each via `mvn spring-boot:run`
+  (gateway on port 8086 to dodge the known port-8080 conflict on this machine — see the
+  `ticketing_local_toolchain` memory / Phase 11 entry above), then `pnpm dev` for the frontend. All
+  were stopped again after the test run except the docker-compose infra containers (postgres/kafka/
+  redis), which were deliberately left running afterward as normal persistent local-dev infra, not
+  test scaffolding — a future session can `docker compose down` them if not wanted.
+- **Two genuine, pre-existing functional bugs were found and fixed** — neither was introduced by
+  the redesign (the ui-designer passes never touched hooks or DOM/form structure, only classNames);
+  both were live bugs the project had apparently never had a real browser-based test exercise
+  before:
+  1. `hooks/useCountdown.ts`: `remainingMs` was seeded into `useState` once on mount and only
+     corrected by an effect keyed on `expiresAt` changing. The render where `expiresAt` first went
+     from `null` to a real value — i.e. the exact moment a seat hold succeeds — still had the stale
+     `remainingMs = 0` for one render, so `isExpired` was briefly (and wrongly) `true`. The
+     seat-selection screen's "hold expired" effect took that at face value and immediately cleared
+     the just-created selection and popped the "Your hold expired" modal — **holding seats was
+     silently and immediately broken for every user**, regardless of the redesign, until this fix.
+     Fixed by deriving `remainingMs` straight from `expiresAt` on every render instead of caching it
+     in state.
+  2. `components/admin/VenueMiniForm.tsx` rendered its own `<form>`, but it's used inside
+     `VenueSelect`, itself nested inside `EventForm`'s own `<form>` on the admin "create event"
+     screen's inline "+ new venue" path. A nested `<form>` is invalid HTML — the browser drops the
+     inner one, so the "Create venue" submit button silently submitted the *outer* `EventForm`
+     instead, closing the whole create-event modal the instant an admin tried to create a venue
+     inline. **This exact path (create event → create venue inline) had been broken since Phase 14
+     landed**, not something the redesign caused. Fixed by making `VenueMiniForm` a plain container
+     with a `type="button"` click handler instead of a `<form>`, which works identically both nested
+     and in its other, non-nested standalone-modal usage.
+- After both fixes: `npx playwright test` — all 8 specs pass, including the two real golden-path
+  runs (`booking-flow.spec.ts`: register → browse → hold 2 seats → pay → confirmed → ticket appears
+  in `/tickets`; `admin-flow.spec.ts`: non-admin blocked from `/admin/events`, then an admin —
+  promoted via a direct `docker exec ticketing-postgres psql` statement, since there's no
+  product-level way to grant `ADMIN` — creates a venue inline and a new event through the form).
+  Vitest (57/57), lint, typecheck, and `pnpm build` all still pass after these fixes too.
+- **New gap discovered this session, not fixed**: there is no `docker-compose.yml` service entry
+  for `auth`/`event`/`gateway`/`frontend` at all, and the existing `booking`/`payment`/
+  `notification` compose entries fail to build because **no `Dockerfile` exists for any backend
+  service** — discovered when `docker compose up -d` was tried without an explicit service list.
+  Running the E2E suite currently requires manually starting every service via `mvn
+  spring-boot:run`/`pnpm dev`, which does not scale to routine/CI use. Flagged as a candidate for a
+  future `docker-infra` pass — see "Next up".
+- Commits: `b0dea0d`, `44a88e8`.
+
 ## Environment (this machine)
 
 Installed and verified working during Phase 2 — a fresh session should just re-verify, not
@@ -891,20 +989,24 @@ reinstall, unless one of these checks fails:
     green multi-module run: `./mvnw -pl gateway,services/auth,services/event test` → 42/42 tests,
     `BUILD SUCCESS`.
 
-## Next up: decide Playwright (scaffold vs. defer) — last open item after all 14 roadmap phases
+## Next up
 
-**All 14 phases in `docs/roadmap.md` are now done, including Phase 14 (admin screens, HEAD is
-`7f3a3e7`).** With every named phase complete, the single remaining real decision, not yet made by
-any agent, is **Playwright**: scaffold the E2E suite now, or make an explicit, logged decision to
-defer it further/indefinitely (e.g. as an out-of-scope stretch item for this demo). This has been
-flagged since Phase 12, carried through Phase 13 and Phase 14 shipping without being acted on —
-`docs/roadmap.md` calls a full Playwright suite (happy path, force-fail payment, short-TTL expiry,
-two-tab seat race) "the definition of done for the vertical slice." As of the last confirmed check
-(Phase 13 session), there was zero trace of Playwright anywhere in the repo (no
-`playwright.config.*`, no `e2e/` folder, no `@playwright/test` dependency in
-`frontend/package.json`); not re-verified during the Phase 14 session since that work didn't touch
-frontend test tooling. Whoever picks this up next should not let it keep silently carrying
-forward — either scaffold it or log the explicit deferral decision and rationale here.
+**All 14 roadmap phases are done, and — as of this session (HEAD `44a88e8`) — the UI redesign and
+the Playwright decision are also both resolved.** There is no single next mandatory task; pick from
+the open items below based on priority. The Playwright scaffold-vs-defer decision that had been
+open since Phase 12 is now closed: Playwright is set up (`frontend/playwright.config.ts`,
+`frontend/e2e/`, 8 specs) with real, passing golden-path and admin-flow runs against a live stack —
+do not re-flag this as open in future sessions.
+
+**New item from this session — E2E suite has no `docker-compose` path yet.** Running
+`npx playwright test` for real currently requires manually starting every backend service locally
+(`mvn spring-boot:run` per service + `pnpm dev`), because there is no `docker-compose.yml` entry for
+auth/event/gateway/frontend, and the existing `booking`/`payment`/`notification` entries fail to
+build since **no service has a `Dockerfile`** at all yet. If E2E is going to be run repeatedly
+(rather than ad hoc, as this session did), a `docker-infra` pass adding Dockerfiles + compose
+entries for every service is the natural next step. Note: this session left the docker-compose
+infra containers (postgres/kafka/redis) running afterward — a future session can `docker compose
+down` them if not wanted, or reuse them directly.
 
 **Also optional follow-up, not blocking, from Phase 14** (see that entry above for full detail):
 adding `GET /api/v1/venues` (listing) and `PUT`/`PATCH /api/v1/events/{id}` (editing) endpoints
