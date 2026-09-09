@@ -135,6 +135,42 @@ class BookingControllerTest {
     }
 
     @Test
+    void listBookingsFiltersByEventId() {
+        long userId = 44L;
+        Instant now = Instant.now();
+        long forEvent10 = insertBooking(userId, 10L, "PENDING", new BigDecimal("50.00"),
+                now, now.plus(10, ChronoUnit.MINUTES));
+        insertBooking(userId, 11L, "PENDING", new BigDecimal("80.00"), now, now.plus(10, ChronoUnit.MINUTES));
+
+        ResponseEntity<JsonNode> response = get("/api/v1/bookings?userId=" + userId + "&eventId=10");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        JsonNode body = response.getBody();
+        assertThat(body.findValuesAsText("id")).containsExactly(String.valueOf(forEvent10));
+        assertThat(body.findValuesAsText("eventId")).containsExactly("10");
+    }
+
+    @Test
+    void listBookingsFiltersByEventIdAndStatusReturningAtMostOnePendingBooking() {
+        long userId = 45L;
+        long eventId = 20L;
+        Instant now = Instant.now();
+        long pending = insertBooking(userId, eventId, "PENDING", new BigDecimal("50.00"),
+                now, now.plus(10, ChronoUnit.MINUTES));
+        insertBooking(userId, eventId, "CANCELLED", new BigDecimal("30.00"),
+                now.minus(1, ChronoUnit.HOURS), now.minus(1, ChronoUnit.HOURS).plus(10, ChronoUnit.MINUTES));
+
+        ResponseEntity<JsonNode> response =
+                get("/api/v1/bookings?userId=" + userId + "&eventId=" + eventId + "&status=PENDING");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        JsonNode body = response.getBody();
+        assertThat(body).hasSize(1);
+        assertThat(body.findValuesAsText("id")).containsExactly(String.valueOf(pending));
+        assertThat(body.get(0).get("expiresAt").asText()).isNotBlank();
+    }
+
+    @Test
     void listBookingsReturnsAnEmptyArrayWhenTheUserHasNoBookings() {
         ResponseEntity<JsonNode> response = get("/api/v1/bookings?userId=123456789");
 

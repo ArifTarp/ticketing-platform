@@ -51,15 +51,19 @@ public class BookingController {
     }
 
     /**
-     * Lists a single user's bookings, optionally filtered by status. {@code userId} is a plain
-     * numeric id in this phase — see {@code services/booking/CLAUDE.md} for why {@code userId=me}
-     * resolution (JWT-derived identity) is deliberately deferred, not forgotten.
+     * Lists a single user's bookings, optionally filtered by {@code eventId} and/or {@code status}.
+     * {@code userId} is a plain numeric id in this phase — see {@code services/booking/CLAUDE.md}
+     * for why {@code userId=me} resolution (JWT-derived identity) is deliberately deferred, not
+     * forgotten. {@code eventId + status=PENDING} is the frontend's "resume my in-progress hold on
+     * page refresh" query — {@code BookingHoldService}'s append-not-duplicate invariant
+     * (one {@code (userId, eventId, PENDING)} booking at a time) guarantees at most one result.
      */
     @GetMapping
     public ResponseEntity<List<BookingResponse>> listBookings(
             @RequestParam(name = "userId") Long userId,
+            @RequestParam(name = "eventId", required = false) Long eventId,
             @RequestParam(name = "status", required = false) BookingStatus status) {
-        return ResponseEntity.ok(bookingService.listBookings(userId, status));
+        return ResponseEntity.ok(bookingService.listBookings(userId, eventId, status));
     }
 
     /**

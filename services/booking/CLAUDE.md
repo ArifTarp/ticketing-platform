@@ -131,7 +131,7 @@ production-real (trusting client-supplied price is fine for this interview demo,
 | Endpoint | Returns |
 |----------|---------|
 | `GET /api/v1/bookings/{id}` | `BookingResponse` — id, userId, eventId, status, total, createdAt, expiresAt, `items[]` (`seatId`, `price`). 404 problem+json if missing. |
-| `GET /api/v1/bookings?userId=&status=` | `BookingResponse[]` for one user, newest first (`createdAt desc`). `status` is optional (`PENDING`/`CONFIRMED`/`CANCELLED`/`EXPIRED`); omitted = any status. `userId` is **required** — 400 problem+json if missing. |
+| `GET /api/v1/bookings?userId=&eventId=&status=` | `BookingResponse[]` for one user, newest first (`createdAt desc`). `eventId` and `status` are both optional (`status` is one of `PENDING`/`CONFIRMED`/`CANCELLED`/`EXPIRED`); omitted = any event / any status. `userId` is **required** — 400 problem+json if missing. `eventId=&status=PENDING` is the frontend's "resume my in-progress hold on page refresh" query and is guaranteed at most one result (see `BookingHoldService`'s append-not-duplicate invariant: at most one `(userId, eventId, PENDING)` booking exists at a time). |
 | `POST /api/v1/bookings/hold` | `BookingResponse` (200) for a new `PENDING` booking with up to 6 held seats; see "The hold endpoint & Redis lock design" above for the 409/400 cases. |
 
 **`userId=me` note:** `docs/roadmap.md` Phase 7 describes the list endpoint's query param as

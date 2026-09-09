@@ -29,6 +29,20 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     @EntityGraph(attributePaths = "items")
     List<Booking> findByUserIdAndStatusOrderByCreatedAtDesc(Long userId, BookingStatus status);
 
+    /** Backs {@code GET /api/v1/bookings?userId=&eventId=} (no {@code status} filter). */
+    @EntityGraph(attributePaths = "items")
+    List<Booking> findByUserIdAndEventIdOrderByCreatedAtDesc(Long userId, Long eventId);
+
+    /**
+     * Backs {@code GET /api/v1/bookings?userId=&eventId=&status=} — in particular
+     * {@code status=PENDING}, which the frontend uses on page refresh to resume an in-progress
+     * hold/checkout for one event (see {@link #findFirstByUserIdAndEventIdAndStatus} below: the
+     * same {@code (userId, eventId, PENDING)} invariant that method relies on guarantees this
+     * query returns at most one row for {@code status=PENDING}).
+     */
+    @EntityGraph(attributePaths = "items")
+    List<Booking> findByUserIdAndEventIdAndStatusOrderByCreatedAtDesc(Long userId, Long eventId, BookingStatus status);
+
     /**
      * Backs ADR-0004: {@code BookingHoldService.holdSeats} appends to this booking (if present)
      * instead of always creating a new one for the same {@code (userId, eventId)} pair.
