@@ -28,12 +28,15 @@ was followed.
 
 ## Current state (as of 2026-09-09)
 
-**All 14 phases in `docs/roadmap.md` (1 through 14) are complete and committed, and — since this
-session — the app has also had a full visual redesign plus its first real Playwright E2E suite.**
-Current HEAD is `691b115` — the most recent commit is a Claude Code tooling audit/fix pass (agents/
-skills/hooks only, not application code; see "Current state" note further down and the "Claude Code
-tooling audit/fix pass" entry under "What's done"). The application's own most recent commit is
-still `44a88e8`. The full vertical slice (register/login → browse → hold seats → pay
+**All 14 phases in `docs/roadmap.md` (1 through 14) are complete and committed. The app has also
+had a full visual redesign, its first real Playwright E2E suite, and — most recently — its first
+full-app parallel-agent review + live-browser-test pass since the redesign.** Current HEAD is
+`3ee4ca3` "fix: address findings from full-app review + live UI test pass" (application code:
+booking backend fix + frontend fixes + one doc-drift fix; see the "Full-app review + live UI test
+pass" entry under "What's done" for full detail). Immediately prior, `8957a08` was the docs commit
+logging the Claude Code tooling audit/fix pass whose actual code landed in `691b115` (agents/
+skills/hooks only, not application code; see the "Claude Code tooling audit/fix pass" entry under
+"What's done"). The full vertical slice (register/login → browse → hold seats → pay
 (mock) → confirmed booking + notification, with the saga and timeout path) plus the admin screens
 (venue/event CRUD, ADMIN-gated) all ship under a new "control panel" dark/monospace-data-face
 design system (commit `b0dea0d`), and the long-standing "Playwright: scaffold or defer?" open item
@@ -46,9 +49,12 @@ venue inline while creating an event" path was completely broken (nested `<form>
 
 Remaining open items, none blocking: two small, documented Phase 14 scope limits (no venue-listing
 GET endpoint, no event-edit PUT/PATCH endpoint), the gateway `BookingRouteTest` flakiness, the
-outbox-durability ADR candidate, and a new item from this session — the E2E suite currently
-requires manually starting every backend service locally; there's no working `docker-compose`
-path for it yet (see "Next up").
+outbox-durability ADR candidate, the E2E suite's missing `docker-compose` path (still requires
+manually starting every backend service locally — see "Next up"), and — newly called out as its
+own backlog line by the 2026-09-09 full-app review pass (not a new fact, just newly tracked
+explicitly) — `services/event` and `services/booking` do zero local JWT/role validation,
+relying entirely on the gateway's `hasRole("ADMIN")`; already documented as deliberate demo-scope
+debt in each service's own `CLAUDE.md`, worth a real auth-hardening pass if/when prioritized.
 
 Immediately prior to Phase 14: a post-Phase-8/9/12 review-and-fix pass, a gateway CORS fix, and a
 saga/gateway review-and-fix pass (`2455d31`) followed by a targeted bug fix from that pass's own
@@ -1018,6 +1024,88 @@ needed to actually run the app end to end, and recommend hooks.
     no root `package.json`.
 - Commit: `691b115`.
 
+### Full-app review + live UI test pass (2026-09-09)
+
+Committed as `3ee4ca3` "fix: address findings from full-app review + live UI test pass" (previous
+HEAD `8957a08` — the docs commit that logged the tooling-audit-and-fix pass whose actual code
+landed in `691b115`; both are covered by the prior "Claude Code tooling audit/fix pass" entry
+above, no separate entry needed for `8957a08` itself). The user asked for all review agents to run in parallel across the
+**whole app**, not just the latest diff, with special attention to UI click/interaction bugs and
+bad visuals, plus a live functional test of the entire app — the first such pass since the UI
+redesign and Phase 14.
+
+- **Dispatched 3 review agents in parallel**: `code-reviewer` (full codebase, not diff-scoped),
+  `domain-review` (full consistency check against `docs/business-rules.md`/`docs/user-flow.md`/
+  `docs/adr/`), and `performance-engineer` — its first real use since being created in the prior
+  session's tooling pass — scoped to backend N+1/index/Redis-lock review plus the frontend
+  seat-map render-cost hotspot `ui-designer.md` had already flagged as one to watch.
+- **In parallel, brought up the full stack via the `run-ticketing-platform` skill** and did a live
+  browser walkthrough with the claude-in-chrome tools covering the full app: register → browse →
+  search/filter → seat select → hold → pay → confirm → view ticket → admin login/table/edit-modal/
+  create-venue/create-event → login/register error paths. No console errors found at any step.
+- **Real bug #1 (concurrency, `code-reviewer`, not reachable via the live UI test since the seat
+  map locks after a hold — only reachable via booking's own append-to-existing-PENDING-booking
+  race path per ADR-0004)**: `BookingHoldService`'s append path extended the booking's DB
+  `expires_at` via `Booking.extendExpiry` but never refreshed the Redis TTL of seats held by an
+  *earlier* call on the same booking, so those seats' Redis locks could expire while the DB still
+  considered the hold valid — letting a third party transiently win the Redis `SETNX` before the
+  DB check rejected it. Fixed: new `SeatHoldLockService.extendTtl` (atomic conditional `EXPIRE`,
+  no ownership token available for this path — same durable-`SeatAvailability`-is-the-real-gate
+  reasoning already used by the existing `forceRelease`) plus
+  `BookingHoldService.refreshPreviouslyHeldSeatTtls`, called after every append commits. New
+  regression test measures the Redis TTL was actually pushed back out (shrinks it artificially
+  first via the same `StringRedisTemplate` pattern `CheckoutSagaTest` already uses, rather than
+  sleeping past a real 10-minute TTL). Booking module: 38/38 tests green after.
+- **Real bug #2 (render cost, found and fixed directly by `performance-engineer`, with measured
+  before/after evidence per its wrapped `verification-before-completion` skill)**: `Seat.tsx` had
+  no `React.memo`, so `SeatMap` (one `Seat` per seat, 50+ in the demo seed) re-rendered every seat
+  on any parent state change, not just the one that actually changed. Fixed with `React.memo`; new
+  regression test measured 50/50 → 1/50 `Seat` render calls when toggling one seat — closes the
+  exact hotspot `ui-designer.md` had flagged as worth watching.
+- **Real bug #3 (cosmetic, live-confirmed)**: `SeatCategoryList.tsx`'s existing seat-category
+  prices in the admin edit modal used hand-interpolated `"$${price}"` instead of the shared
+  `formatPrice()` util every other price in the app already goes through — rendered as `$250`
+  instead of `$250.00`. Confirmed live in the browser before the fix, and confirmed fixed
+  (`$250.00`/`$120.00`/`$60.00`) live in the browser again after restarting the booking service and
+  reloading the admin modal. Also gave each editable seat-category row a stable id instead of an
+  array-index React key (fragile across row removal).
+- **Doc-only drift, `domain-review` (not a code bug — the code was already correct)**:
+  `docs/user-flow.md` screen 8 still described the admin events table as reusing the public
+  `fetchEvents()`/`GET /api/v1/events` with a status filter, but the actual (correct, already
+  shipped and tested in Phase 14) implementation is a dedicated `GET /api/v1/admin/events` /
+  `fetchAdminEvents()` — a deliberate choice since the gateway's role-gating is path-based, not
+  query-param-based. Also, the doc's own interaction-flow/states wording contradicted its own
+  documented "no event-update endpoint" limitation elsewhere in the same section. Both fixed to
+  match the real, correct behavior.
+- **Explicitly not bugs, checked and confirmed fine**: `domain-review` found no dropped
+  visual-state triggers anywhere post-redesign, no ADR violations, saga state machine matches
+  `business-rules.md` exactly. `code-reviewer` found backend package layering/naming/service-
+  boundaries all consistent, Kafka/SQL conventions all followed, no dead click handlers or
+  inverted conditionals anywhere it checked (including every admin form and the full checkout/
+  seat-selection flow). `performance-engineer` found the booking module's N+1 patterns already
+  correctly avoided via `@EntityGraph`/`join fetch`, every index it checked against actual query
+  filters already exists, the Redis seat-hold locking path already correctly-atomic and leak-free
+  on every failure branch, Resilience4j config reasonable, and the frontend production bundle
+  (1.2 MB, Turbopack) has nothing unusually large in it.
+- **One pre-existing architectural note re-surfaced, not new**: `services/event` and
+  `services/booking` still do zero local JWT/role validation, relying entirely on the gateway's
+  `hasRole("ADMIN")` — already documented as deliberate demo-scope debt in each service's own
+  `CLAUDE.md`. `code-reviewer` re-flagged it as worth keeping on the backlog for a real
+  auth-hardening pass; now tracked explicitly in "Current state" above and "Next up" below as its
+  own line rather than only living inside each service's `CLAUDE.md`.
+- **Verification**: `mvn -pl services/booking -am test` → 38/38. Frontend: `npx tsc --noEmit`
+  clean, `pnpm lint` clean (fixed one trivial unused-eslint-disable warning along the way),
+  `pnpm test` → 58/58. Live re-test in the browser confirmed the price-formatting fix actually
+  shows `$250.00`. The `.githooks/pre-commit` hook set up in the prior session (commit `691b115`)
+  fired correctly on this very commit — frontend lint+typecheck ran (frontend files changed) and a
+  scoped `services/booking` compile check ran (that module changed) — the first real proof it
+  works end to end on a normal commit, not just the deliberate test-and-revert dry run from when it
+  was built.
+- **Takeaway**: this was the first full-app parallel-agent review + live-browser-test pass since
+  the UI redesign and Phase 14, and it came back clean apart from the 4 findings above (all now
+  fixed) — a good signal the app is in a solid state.
+- Commit: `3ee4ca3`.
+
 ## Environment (this machine)
 
 Installed and verified working during Phase 2 — a fresh session should just re-verify, not
@@ -1096,12 +1184,20 @@ reinstall, unless one of these checks fails:
 
 ## Next up
 
-**All 14 roadmap phases are done, and — as of this session (HEAD `44a88e8`) — the UI redesign and
-the Playwright decision are also both resolved.** There is no single next mandatory task; pick from
+**All 14 roadmap phases are done; the UI redesign, the Playwright decision, the Claude Code
+tooling audit, and — as of `3ee4ca3` — the first full-app parallel-agent review + live-browser-test
+pass since the redesign are all also resolved.** There is no single next mandatory task; pick from
 the open items below based on priority. The Playwright scaffold-vs-defer decision that had been
 open since Phase 12 is now closed: Playwright is set up (`frontend/playwright.config.ts`,
 `frontend/e2e/`, 8 specs) with real, passing golden-path and admin-flow runs against a live stack —
 do not re-flag this as open in future sessions.
+
+**New backlog item, first called out explicitly here (not a new fact — already documented as
+deliberate in each service's own `CLAUDE.md`, re-flagged by `code-reviewer` in the 2026-09-09
+full-app review pass): `services/event` and `services/booking` do zero local JWT/role validation**,
+relying entirely on the gateway's `hasRole("ADMIN")` checks. Worth a real auth-hardening pass
+(defense-in-depth per-service validation) if/when prioritized — route to `backend-service`. Not
+urgent; the gateway is a real enforcement point today, this is about not having a second layer.
 
 **New item from this session — E2E suite has no `docker-compose` path yet.** Running
 `npx playwright test` for real currently requires manually starting every backend service locally
