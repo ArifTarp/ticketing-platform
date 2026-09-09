@@ -15,5 +15,6 @@ public record CreateEventRequest(@NotNull Long venueId,
                                  @NotBlank String title,
                                  String description,
                                  @NotNull Instant startsAt,
-                                 EventStatus status) {
+                                 EventStatus status,
+                                 String imageUrl) {
 }

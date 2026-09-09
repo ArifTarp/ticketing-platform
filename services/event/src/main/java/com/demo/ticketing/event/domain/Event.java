@@ -47,6 +47,9 @@ public class Event {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
+
     /** Price tiers for this event, most expensive first (matches the price-tier list in the UI). */
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("price DESC")
@@ -57,11 +60,17 @@ public class Event {
     }
 
     public Event(Venue venue, String title, String description, Instant startsAt, EventStatus status) {
+        this(venue, title, description, startsAt, status, null);
+    }
+
+    public Event(Venue venue, String title, String description, Instant startsAt, EventStatus status,
+                 String imageUrl) {
         this.venue = venue;
         this.title = title;
         this.description = description;
         this.startsAt = startsAt;
         this.status = status;
+        this.imageUrl = imageUrl;
         this.createdAt = Instant.now();
     }
 
@@ -93,12 +102,25 @@ public class Event {
         return createdAt;
     }
 
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
     public List<SeatCategory> getSeatCategories() {
         return seatCategories;
     }
 
     public void addSeatCategory(SeatCategory seatCategory) {
         this.seatCategories.add(seatCategory);
+    }
+
+    /** Admin update (PUT /events/{id}): overwrites every mutable field in place. */
+    public void update(String title, String description, Instant startsAt, EventStatus status, String imageUrl) {
+        this.title = title;
+        this.description = description;
+        this.startsAt = startsAt;
+        this.status = status;
+        this.imageUrl = imageUrl;
     }
 
     /**

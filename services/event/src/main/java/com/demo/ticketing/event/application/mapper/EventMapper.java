@@ -43,7 +43,8 @@ public class EventMapper {
                 venue.getCity(),
                 event.getStartsAt(),
                 event.getStatus(),
-                lowestPriceOf(event));
+                lowestPriceOf(event),
+                event.getImageUrl());
     }
 
     public EventResponse toDetail(Event event) {
@@ -54,6 +55,7 @@ public class EventMapper {
                 event.getStartsAt(),
                 event.getStatus(),
                 event.isBookable(Instant.now()),
+                event.getImageUrl(),
                 toVenueDto(event.getVenue()),
                 event.getSeatCategories().stream().map(this::toSeatCategoryDto).toList());
     }

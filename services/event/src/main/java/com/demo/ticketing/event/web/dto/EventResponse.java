@@ -17,6 +17,7 @@ public record EventResponse(Long id,
                             Instant startsAt,
                             EventStatus status,
                             boolean bookable,
+                            String imageUrl,
                             VenueDto venue,
                             List<SeatCategoryDto> seatCategories) {
 }

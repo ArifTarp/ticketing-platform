@@ -86,9 +86,20 @@ class EventControllerTest {
 
     @Test
     void listEventsFiltersByCityCaseInsensitively() {
+        // Istanbul now also hosts TechHub Convention Center's 8 ON_SALE V3 workshop events, on
+        // top of Demo Arena's "Neon Nights Live".
         JsonNode body = get("/api/v1/events?city=istanbul").getBody();
 
-        assertThat(titlesOf(body)).containsExactly("Neon Nights Live");
+        assertThat(titlesOf(body)).containsExactlyInAnyOrder(
+                "Neon Nights Live",
+                "React ile Modern Frontend Geliştirme Atölyesi",
+                "Kubernetes: Production'a Hazır mısınız?",
+                "LLM Tabanlı Uygulama Geliştirme",
+                "Sistem Tasarımı Derinlemesine",
+                "Veri Mühendisliğine Giriş: Apache Kafka ve Spark",
+                "GraphQL ile API Tasarımı",
+                "Terraform ile Altyapıyı Kod Olarak Yönetmek",
+                "Yapay Zeka Destekli Yazılım Geliştirme Araçları");
     }
 
     @Test
@@ -100,9 +111,12 @@ class EventControllerTest {
 
     @Test
     void listEventsFiltersByStartDateRange() {
-        String from = Instant.now().plus(40, ChronoUnit.DAYS).toString();
+        // A tight window isolates "Acoustic Evening" (starts +45 days) from the V3 workshop
+        // events, several of which also start more than 40 days out.
+        String from = Instant.now().plus(44, ChronoUnit.DAYS).toString();
+        String to = Instant.now().plus(46, ChronoUnit.DAYS).toString();
 
-        JsonNode body = get("/api/v1/events?from=" + from).getBody();
+        JsonNode body = get("/api/v1/events?from=" + from + "&to=" + to).getBody();
 
         assertThat(titlesOf(body)).containsExactly("Acoustic Evening");
     }
@@ -197,15 +211,17 @@ class EventControllerTest {
 
     @Test
     void seedDataIsPresentForTheDemo() {
+        // V2 seeds 2 venues / 4 events / 78 seats / 6 categories; V3 adds 2 larger venues (241 +
+        // 168 = 409 seats) and 14 developer/tech workshop events, each with 4 price tiers.
         Map<String, Object> counts = jdbcTemplate.queryForMap(
                 "SELECT (SELECT count(*) FROM venues) AS venues, (SELECT count(*) FROM events) AS events, "
                         + "(SELECT count(*) FROM seats) AS seats, "
                         + "(SELECT count(*) FROM seat_categories) AS categories");
 
-        assertThat(counts.get("venues")).isEqualTo(2L);
-        assertThat(counts.get("events")).isEqualTo(4L);
-        assertThat(counts.get("seats")).isEqualTo(78L);
-        assertThat(counts.get("categories")).isEqualTo(6L);
+        assertThat(counts.get("venues")).isEqualTo(4L);
+        assertThat(counts.get("events")).isEqualTo(18L);
+        assertThat(counts.get("seats")).isEqualTo(487L);
+        assertThat(counts.get("categories")).isEqualTo(62L);
     }
 
     private ResponseEntity<JsonNode> post(String path, Object body) {
@@ -371,9 +387,19 @@ class EventControllerTest {
         JsonNode body = get("/api/v1/admin/events?city=istanbul").getBody();
 
         // Demo Arena (Istanbul) hosts Neon Nights Live (ON_SALE), Midnight Rehearsal (DRAFT) and
-        // Retro Fest (CLOSED); Riverside Hall (Acoustic Evening) is a different city.
+        // Retro Fest (CLOSED); TechHub Convention Center (also Istanbul) hosts 8 ON_SALE V3
+        // workshop events. Riverside Hall/Innovation Campus Auditorium (Acoustic Evening and
+        // friends) are a different city (Ankara).
         assertThat(titlesOf(body)).containsExactlyInAnyOrder(
-                "Neon Nights Live", "Midnight Rehearsal", "Retro Fest");
+                "Neon Nights Live", "Midnight Rehearsal", "Retro Fest",
+                "React ile Modern Frontend Geliştirme Atölyesi",
+                "Kubernetes: Production'a Hazır mısınız?",
+                "LLM Tabanlı Uygulama Geliştirme",
+                "Sistem Tasarımı Derinlemesine",
+                "Veri Mühendisliğine Giriş: Apache Kafka ve Spark",
+                "GraphQL ile API Tasarımı",
+                "Terraform ile Altyapıyı Kod Olarak Yönetmek",
+                "Yapay Zeka Destekli Yazılım Geliştirme Araçları");
     }
 
     @Test
@@ -389,5 +415,85 @@ class EventControllerTest {
 
         assertThat(body.isArray()).isTrue();
         assertThat(body).isEmpty();
+    }
+
+    private void put(String path, Object body, java.util.function.Consumer<ResponseEntity<JsonNode>> assertion) {
+        assertion.accept(restTemplate.exchange(path, org.springframework.http.HttpMethod.PUT,
+                new org.springframework.http.HttpEntity<>(body), JsonNode.class));
+    }
+
+    @Test
+    void updateEventReturns200WithTheUpdatedEvent() {
+        long venueId = seedVenueId();
+        Map<String, Object> createBody = Map.of(
+                "venueId", venueId,
+                "title", "Update Me " + Instant.now().toEpochMilli(),
+                "description", "before update",
+                "startsAt", Instant.now().plus(30, ChronoUnit.DAYS).toString());
+        JsonNode created = post("/api/v1/events", createBody).getBody();
+        long eventId = created.get("id").asLong();
+
+        Map<String, Object> updateBody = Map.of(
+                "title", "Updated Title",
+                "description", "after update",
+                "startsAt", Instant.now().plus(60, ChronoUnit.DAYS).toString(),
+                "status", "ON_SALE",
+                "imageUrl", "https://picsum.photos/seed/updated/800/450");
+
+        put("/api/v1/events/" + eventId, updateBody, response -> {
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+            JsonNode body = response.getBody();
+            assertThat(body.get("id").asLong()).isEqualTo(eventId);
+            assertThat(body.get("title").asText()).isEqualTo("Updated Title");
+            assertThat(body.get("description").asText()).isEqualTo("after update");
+            assertThat(body.get("status").asText()).isEqualTo("ON_SALE");
+            assertThat(body.get("imageUrl").asText()).isEqualTo("https://picsum.photos/seed/updated/800/450");
+        });
+
+        jdbcTemplate.update("DELETE FROM events WHERE id = ?", eventId);
+    }
+
+    @Test
+    void updateEventReturns404ProblemDetailWhenTheEventDoesNotExist() {
+        Map<String, Object> updateBody = Map.of(
+                "title", "Ghost Event",
+                "startsAt", Instant.now().plus(30, ChronoUnit.DAYS).toString(),
+                "status", "ON_SALE");
+
+        put("/api/v1/events/999999", updateBody, response -> {
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+            assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON);
+        });
+    }
+
+    @Test
+    void deleteEventReturns204AndRemovesTheEventAndItsSeatCategories() {
+        long venueId = seedVenueId();
+        Map<String, Object> createBody = Map.of(
+                "venueId", venueId,
+                "title", "Delete Me " + Instant.now().toEpochMilli(),
+                "startsAt", Instant.now().plus(30, ChronoUnit.DAYS).toString());
+        JsonNode created = post("/api/v1/events", createBody).getBody();
+        long eventId = created.get("id").asLong();
+        post("/api/v1/events/" + eventId + "/seat-categories",
+                List.of(Map.of("name", "Delete Tier", "price", 42.00, "section", "A")));
+
+        ResponseEntity<Void> response = restTemplate.exchange(
+                "/api/v1/events/" + eventId, org.springframework.http.HttpMethod.DELETE, null, Void.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM events WHERE id = ?", Long.class, eventId)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM seat_categories WHERE event_id = ?", Long.class, eventId)).isZero();
+    }
+
+    @Test
+    void deleteEventReturns404ProblemDetailWhenTheEventDoesNotExist() {
+        ResponseEntity<JsonNode> response = restTemplate.exchange(
+                "/api/v1/events/999999", org.springframework.http.HttpMethod.DELETE, null, JsonNode.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON);
     }
 }

@@ -19,6 +19,7 @@ import com.demo.ticketing.event.web.dto.EventResponse;
 import com.demo.ticketing.event.web.dto.EventSummaryResponse;
 import com.demo.ticketing.event.web.dto.SeatCategoryDto;
 import com.demo.ticketing.event.web.dto.SeatMapResponse;
+import com.demo.ticketing.event.web.dto.UpdateEventRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -114,9 +115,35 @@ public class EventService {
         Venue venue = venueRepository.findById(request.venueId())
                 .orElseThrow(() -> new VenueNotFoundException(request.venueId()));
         EventStatus status = request.status() == null ? EventStatus.DRAFT : request.status();
-        Event event = new Event(venue, request.title(), request.description(), request.startsAt(), status);
+        Event event = new Event(venue, request.title(), request.description(), request.startsAt(), status,
+                request.imageUrl());
         Event saved = eventRepository.save(event);
         return eventMapper.toDetail(saved);
+    }
+
+    /**
+     * Admin update: overwrites every mutable field ({@code title}, {@code description},
+     * {@code startsAt}, {@code status}, {@code imageUrl}) in place. 404 if {@code eventId} does not
+     * exist. The event's venue is not reassignable via this endpoint.
+     */
+    @Transactional
+    public EventResponse updateEvent(Long eventId, UpdateEventRequest request) {
+        Event event = loadEvent(eventId);
+        event.update(request.title(), request.description(), request.startsAt(), request.status(),
+                request.imageUrl());
+        return eventMapper.toDetail(event);
+    }
+
+    /**
+     * Admin delete. 404 if {@code eventId} does not exist. {@code seat_categories} for this event
+     * cascade-delete via {@code ON DELETE CASCADE} on {@code seat_categories.event_id}
+     * (see V1__create_venues_events_seats.sql); seats belong to the venue, not the event, so they
+     * are unaffected (ADR-0001).
+     */
+    @Transactional
+    public void deleteEvent(Long eventId) {
+        Event event = loadEvent(eventId);
+        eventRepository.delete(event);
     }
 
     /**

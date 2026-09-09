@@ -7,13 +7,16 @@ import com.demo.ticketing.event.web.dto.EventResponse;
 import com.demo.ticketing.event.web.dto.EventSummaryResponse;
 import com.demo.ticketing.event.web.dto.SeatCategoryDto;
 import com.demo.ticketing.event.web.dto.SeatMapResponse;
+import com.demo.ticketing.event.web.dto.UpdateEventRequest;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -93,5 +96,21 @@ public class EventController {
             @Valid @RequestBody List<@Valid CreateSeatCategoryRequest> requests) {
         List<SeatCategoryDto> response = eventService.addSeatCategories(eventId, requests);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /** Admin update. 404 problem+json if {@code eventId} does not exist. */
+    @PutMapping("/{eventId}")
+    public ResponseEntity<EventResponse> updateEvent(
+            @PathVariable("eventId") Long eventId,
+            @Valid @RequestBody UpdateEventRequest request) {
+        EventResponse response = eventService.updateEvent(eventId, request);
+        return ResponseEntity.ok(response);
+    }
+
+    /** Admin delete. 404 problem+json if {@code eventId} does not exist; 204 on success. */
+    @DeleteMapping("/{eventId}")
+    public ResponseEntity<Void> deleteEvent(@PathVariable("eventId") Long eventId) {
+        eventService.deleteEvent(eventId);
+        return ResponseEntity.noContent().build();
     }
 }

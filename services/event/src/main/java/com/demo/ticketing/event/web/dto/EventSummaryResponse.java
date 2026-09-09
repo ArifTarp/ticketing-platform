@@ -17,5 +17,6 @@ public record EventSummaryResponse(Long id,
                                    String city,
                                    Instant startsAt,
                                    EventStatus status,
-                                   BigDecimal fromPrice) {
+                                   BigDecimal fromPrice,
+                                   String imageUrl) {
 }
