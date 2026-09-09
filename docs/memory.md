@@ -26,28 +26,31 @@ subagent's context open after "done" in a way that invites it to take further ac
 verify after the fact that nothing was committed without sign-off, not just trust the instruction
 was followed.
 
-## Current state (as of 2026-09-08)
+## Current state (as of 2026-09-09)
 
-**Phases 1–9 (backend), Phase 10–12 (frontend), and a post-Phase-8/9/12 review-and-fix pass are all
-complete and committed.** Phase 3 (auth) landed in `7dff70f`, Phase 5 (event catalog) in `62091ee`,
-Phase 4 (gateway with JWT validation) in `8a47d93`, Phase 6 (Kafka topics & DTO scaffolding) in
-`d35012b`, Phase 7 (booking CRUD + Redis seat holds) in `abb2de4`, a gateway fix wiring up booking
-and event routes in `f7d9030`, Phase 8 (payment mock + checkout saga wiring) in `d22d465`, Phase 9
-(notification service) in `a0b1460`, Phase 10 (frontend architecture review, advisory-only) fed
-directly into Phase 11 (frontend auth + event browsing, screens 1-3) in `d78656c`, **Phase 12
-(frontend seat selection/checkout/confirmation, screens 4-6) in `3e85aab`**, and **a 4-agent
-review-and-fix pass across Phases 8/9/12 in `555c75f`** (real saga-idempotency and seat-hold bugs
-found and fixed — see entries below). Working tree is clean as of this log entry; nothing is
-sitting uncommitted.
+**Phases 1–13 (the full vertical slice, backend + frontend) are complete and committed**, plus a
+post-Phase-8/9/12 review-and-fix pass and a gateway CORS fix. Phase 3 (auth) landed in `7dff70f`,
+Phase 5 (event catalog) in `62091ee`, Phase 4 (gateway with JWT validation) in `8a47d93`, Phase 6
+(Kafka topics & DTO scaffolding) in `d35012b`, Phase 7 (booking CRUD + Redis seat holds) in
+`abb2de4`, a gateway fix wiring up booking and event routes in `f7d9030`, Phase 8 (payment mock +
+checkout saga wiring) in `d22d465`, Phase 9 (notification service) in `a0b1460`, Phase 10 (frontend
+architecture review, advisory-only) fed directly into Phase 11 (frontend auth + event browsing,
+screens 1-3) in `d78656c`, Phase 12 (frontend seat selection/checkout/confirmation, screens 4-6) in
+`3e85aab`, a 4-agent review-and-fix pass across Phases 8/9/12 in `555c75f` (real saga-idempotency
+and seat-hold bugs found and fixed — see entries below), **Phase 13 (frontend `/tickets` — my
+bookings list + client-side QR) in `66a5ff3`**, and a **gateway CORS fix for the frontend origin in
+`529d287`/`e244d72`** (see the Phase 13 and CORS entries below). Working tree is clean as of this
+log entry (verified via `git status`) except for this file itself. Note: commit `55a8c00` ("docs: log Phase 13 my tickets completion") is misleadingly
+named — it only logged the prior Phase 8/9/12 review-and-fix pass (commit `555c75f`), not Phase 13
+itself (`66a5ff3`), which had no dedicated "What's done" entry until this log update.
 
-**Open gap carried forward prominently: Playwright is not set up anywhere in this repo** — no
-config, no e2e test folder, despite `docs/roadmap.md` naming a full Playwright E2E suite (happy
-path, force-fail, TTL-expiry, two-tab seat race) as "the definition of done for the vertical slice"
-at both Phase 12's and Phase 13's verify steps. This was flagged by the frontend-architecture review
-as something to close as an explicit follow-up before/alongside Phase 13, not silently deferred
-again. **Next: Phase 13 — `/tickets` (my bookings list + client-side QR, no new backend work)**,
-with the Playwright gap needing a decision (scaffold now vs. explicitly re-defer) since Phase 13's
-own verify step in the roadmap also assumes Playwright already exists.
+**Top open item: Playwright is still not set up anywhere in this repo** — confirmed again this
+session (no `playwright.config.*`, no `e2e/` folder, no `@playwright/test` in
+`frontend/package.json`). This has now been flagged since Phase 12, carried through Phase 13's
+shipping without being acted on, despite `docs/roadmap.md` naming a full Playwright E2E suite
+(happy path, force-fail, TTL-expiry, two-tab seat race) as "the definition of done for the vertical
+slice." **No agent has yet made the call on scaffold-now vs. explicitly-defer** — that decision is
+the next concrete thing to do, before Phase 14 (admin, optional/last per the roadmap).
 
 Local toolchain is installed and working on this machine (see "Environment" below) — a fresh
 session does not need to reinstall anything, just re-verify with the commands in that section. One
@@ -56,11 +59,11 @@ pre-existing, unrelated Windows `Tomcat10.exe` service**, so the gateway cannot 
 default port here — see the Phase 11 entry below before assuming `docker-compose`'s default gateway
 config will just work on this machine.
 
-Also still open, not yet resolved by any agent: a suspicious file `frontend/AGENTS.md` was found
-during the Phase 8/9/12 review pass containing what looks like a planted prompt-injection payload
-(instructs readers to consult `node_modules/next/dist/docs/`, falsely claims to be auto-regenerated
-by `next dev`). It has been reported to the user directly, not fixed or deleted by any agent — still
-present as of this log entry and needs a human decision on whether to remove it.
+**RESOLVED this session**: the suspicious `frontend/AGENTS.md` file (a planted prompt-injection
+payload, first flagged during the Phase 8/9/12 review pass and left open since) has been deleted
+with the user's explicit approval, and `frontend/CLAUDE.md` (which had auto-imported it via
+`@AGENTS.md`) was rewritten with real frontend conventions content. This item is closed — see the
+"Gateway CORS + AGENTS.md removal" entry below.
 
 ## What's done
 
@@ -619,6 +622,56 @@ conventions.md` (the latter now codifies the pattern first established ad hoc in
   this log entry and needs a human decision on whether to remove it.
 - Commit: `555c75f`.
 
+### Phase 13 — Frontend: `/tickets` my bookings + client-side QR (2026-09-08)
+
+- Built `/tickets`: reads the existing `GET /api/v1/bookings?userId=` endpoint (Phase 7, no new
+  backend work required per the roadmap), decodes the JWT `sub` claim client-side to supply
+  `userId` (closing the Phase 10/11-flagged integration gap — booking still doesn't parse JWTs
+  itself), and renders a client-side-generated QR code per confirmed booking (no backend QR
+  generation or storage — purely a frontend artifact, consistent with the mock-payment/no-real-PSP
+  scope elsewhere in this demo).
+- Reviewed independently this session by both `frontend-architecture` and `domain-review` (as part
+  of the same 4-agent pass that covered the gateway CORS work below) — both confirmed the screen is
+  fully implemented and solid, no bugs found.
+- Commit: `66a5ff3`. Note: the very next commit, `55a8c00`, is titled "docs: log Phase 13 my tickets
+  completion" but its actual content only logs the *prior* Phase 8/9/12 review-and-fix pass
+  (`555c75f`) — it does not describe Phase 13 itself. This "What's done" entry is Phase 13's first
+  real log entry; the commit message should not be trusted as a description of what it logged.
+
+### Gateway CORS support + `frontend/AGENTS.md` removal (2026-09-09)
+
+- Added CORS support to the gateway for the frontend origin (`http://localhost:3000`): Spring Cloud
+  Gateway's `globalcors` config handles preflight/headers for proxied routes, but
+  `ProblemDetailResponseWriter` also needed its own explicit CORS headers on gateway-originated
+  error responses (401/403/503) — Spring Security's reactive auth handlers bypass `globalcors`
+  entirely, so without this fix the browser couldn't read error bodies cross-origin even though
+  successful proxied responses worked fine.
+- **Caught before shipping, not committed separately**: an initial version of this fix included an
+  explicit `cors-preflight` gateway route forwarding every OPTIONS request to `localhost:8086` — not
+  a real service, and redundant with (would have broken) `globalcors` handling every other route's
+  preflight. Removed before commit; only `529d287` (the working version) landed.
+- **Follow-up fix, `e244d72`**: this session's `backend-architecture` and `domain-review` passes
+  both independently flagged that the allowed origin was hardcoded as an independent literal in two
+  places (`application.yml`'s `globalcors` block and `ProblemDetailResponseWriter`) — a drift risk
+  if the frontend origin ever changes. Externalized both to one shared property
+  `app.cors.allowed-origin` (env override `CORS_ALLOWED_ORIGIN`), so a future origin change is a
+  single edit.
+- **Same commit (`e244d72`) also removed the long-open `frontend/AGENTS.md` item**: this file (first
+  flagged during the Phase 8/9/12 review pass as a suspicious planted prompt-injection payload —
+  falsely claiming to be auto-generated by `next dev`, instructing readers to consult a nonexistent
+  `node_modules/next/dist/docs/` path) was deleted with the user's explicit approval in this
+  session. `frontend/CLAUDE.md`, which had been auto-importing it via an `@AGENTS.md` reference, was
+  rewritten with real frontend conventions content instead. **This item is now closed** — do not
+  keep carrying it forward as an open gap in future "Current state"/"Next up" sections.
+- **Fresh 4-agent review pass** (`code-reviewer`, `domain-review`, `backend-architecture`,
+  `frontend-architecture`) ran this session against the CORS work and Phase 13 together. No new bugs
+  found beyond the CORS-origin-duplication issue above (now fixed). The two long-carried-forward
+  "known gaps" — client-supplied seat-hold price (Phase 7) and event's per-section pricing model
+  (Phase 5) — were reviewed again by `backend-architecture` and judged fine to leave as documented
+  demo-scope simplifications, not blockers; they remain open only as documentation footnotes, not as
+  action items.
+- Commits: `529d287`, `e244d72`.
+
 ## Environment (this machine)
 
 Installed and verified working during Phase 2 — a fresh session should just re-verify, not
@@ -695,30 +748,32 @@ reinstall, unless one of these checks fails:
     green multi-module run: `./mvnw -pl gateway,services/auth,services/event test` → 42/42 tests,
     `BUILD SUCCESS`.
 
-## Next up: Phase 13 — `/tickets` (my bookings list + client-side QR)
+## Next up: decide Playwright (scaffold vs. defer), then Phase 14 (admin, optional/last)
 
-Per `docs/roadmap.md`, Phase 13 is a frontend-only phase: no new backend work is required, it reads
-from the existing `GET /api/v1/bookings?userId=` endpoint (Phase 7) and generates a QR code
-client-side. **Agents:** `frontend`.
+**Phases 1–13 are all done.** The next real decision, not yet made by any agent, is **Playwright**:
+scaffold the E2E suite now, or make an explicit, logged decision to defer it further. This has been
+flagged since Phase 12, was still open through Phase 13 shipping, and remains the top item —
+`docs/roadmap.md` calls a full Playwright suite (happy path, force-fail payment, short-TTL expiry,
+two-tab seat race) "the definition of done for the vertical slice." Confirmed again this session:
+still zero trace of Playwright anywhere in the repo (no `playwright.config.*`, no `e2e/` folder, no
+`@playwright/test` dependency in `frontend/package.json`). Whoever picks this up next should not
+silently proceed to Phase 14 without addressing this — either scaffold it or log the explicit
+deferral decision and rationale here.
 
-**Before or alongside Phase 13, close the Playwright gap** — it does not exist anywhere in this
-repo yet (no config, no e2e folder), even though `docs/roadmap.md` names a full Playwright E2E
-suite (happy path, force-fail payment, short-TTL expiry, two-tab seat race) as "the definition of
-done for the vertical slice" at Phase 12's verify step, and Phase 13's own verify step in the
-roadmap likewise assumes Playwright already exists. This was flagged by the frontend-architecture
-review during the Phase 8/9/12 review pass as something to scaffold as an explicit follow-up, not
-silently deferred again — whoever picks up Phase 13 should either scaffold it first or make an
-explicit, logged decision to defer it further (not just proceed as if it isn't a gap).
+**After that decision is made, Phase 14 (admin: events screen) is next per the roadmap** — it's
+named optional/last-in-build-order there, so it's reasonable to defer it further if Playwright is
+prioritized instead, but it should be a deliberate choice, not an oversight.
 
 Preconditions/reminders for whoever picks this up:
-- `fetchMyBookings()` still needs the JWT `sub` claim decoded client-side (booking doesn't parse
-  JWTs itself, `userId` is a plain query param) — same gap Phase 10 flagged, still open.
 - Remember this machine's port-8080 conflict (pre-existing Windows `Tomcat10.exe`) if running the
   full stack via `docker-compose` locally — see the Phase 11 entry above.
-- The `frontend/AGENTS.md` suspicious file (see the Phase 8/9/12 review-pass entry above) is still
-  present and unresolved — worth a human decision before it's forgotten further.
+- The `frontend/AGENTS.md` prompt-injection file is now **resolved** (deleted, see the "Gateway CORS
+  + AGENTS.md removal" entry above) — do not re-flag it as an open item.
+- `fetchMyBookings()`'s JWT-`sub`-decoding gap (flagged by Phase 10) is also now **resolved** — it
+  was implemented as part of Phase 13's `/tickets` screen.
 
-**Carried-forward, lower priority, unresolved from earlier phases**:
+**Carried-forward, lower priority, reviewed again this session and judged non-blocking (documented
+demo-scope simplifications, not action items)**:
 - The price-is-client-supplied gap from Phase 7 (`HoldSeatRequest.price` is caller-supplied, not
   fetched from event) is still open — flagged for `workflow-rules`/`backend-architecture`, likely
   needs a Kafka-published price-tier snapshot event to close properly.
