@@ -29,7 +29,12 @@ was followed.
 ## Current state (as of 2026-09-09)
 
 **Phases 1–13 (the full vertical slice, backend + frontend) are complete and committed**, plus a
-post-Phase-8/9/12 review-and-fix pass and a gateway CORS fix. Phase 3 (auth) landed in `7dff70f`,
+post-Phase-8/9/12 review-and-fix pass, a gateway CORS fix, and — landed later this same day — a
+saga/gateway review-and-fix pass (`2455d31`) followed by a targeted bug fix from that pass's own
+review agents (`7d67ccc`). Current HEAD is `7d67ccc`. See the "Saga idempotency, pending-booking
+race, and CORS header-dup fix + review pass" entry below for details; the repo-root `NOTLAR.txt`
+scratch file that tracked this in-progress work across sessions has been superseded by this log
+entry and should be treated as stale/deletable going forward. Phase 3 (auth) landed in `7dff70f`,
 Phase 5 (event catalog) in `62091ee`, Phase 4 (gateway with JWT validation) in `8a47d93`, Phase 6
 (Kafka topics & DTO scaffolding) in `d35012b`, Phase 7 (booking CRUD + Redis seat holds) in
 `abb2de4`, a gateway fix wiring up booking and event routes in `f7d9030`, Phase 8 (payment mock +
@@ -672,6 +677,75 @@ conventions.md` (the latter now codifies the pattern first established ad hoc in
   action items.
 - Commits: `529d287`, `e244d72`.
 
+### Saga idempotency, pending-booking race, and CORS header-dup fix + review pass (2026-09-09)
+
+A prior session had left two agents' work uncommitted in the working tree (tracked at the time in
+a repo-root scratch file, `NOTLAR.txt`, since superseded by this entry): a saga-orchestrator fix
+and a gateway-resilience fix. This session verified both were actually complete and correct on
+disk, ran the full test suites (booking module: 37 tests via Testcontainers/Docker; gateway
+module: 29 tests) — all green — and committed them as `2455d31` "fix(booking,gateway): saga
+idempotency claim ordering, pending-booking race, CORS header dup":
+
+- **`SagaCompletionService`**: the Kafka idempotency claim now commits **after** the business work
+  (booking status transition, seat mutation, `SagaState` update) via an `afterCommit`
+  `TransactionSynchronization` hook, not before it — matches the payment service's reference
+  pattern (documented in `docs/adr/0005`). Previously a crash mid-work could leave a booking stuck
+  `PENDING` forever with the message wrongly marked processed.
+- **`BookingHoldService`** + new migration `V3__bookings_one_pending_per_user_event.sql`: added a
+  partial unique index `uq_bookings_user_event_pending` on `bookings(user_id, event_id) WHERE
+  status='PENDING'` plus a `persistHoldWithRetry` retry loop, closing a TOCTOU race where two
+  concurrent hold requests for different seats (same user/event) could create two separate
+  `PENDING` bookings instead of one accumulating booking (violating ADR-0004).
+- **Gateway `ProblemDetailResponseWriter.addCorsHeaders`**: switched `Headers.add(...)` to
+  `.set(...)` to prevent a duplicate `Access-Control-Allow-Origin` header (browsers reject
+  responses with two values outright), plus a new `CorsTest` covering preflight/401/503/
+  mismatched-origin cases.
+
+**Also discovered, not a regression from this session's work**: gateway's `BookingRouteTest.
+validTokenPassesTheEdgeAndForwardsThePathAndAuthorizationHeaderUnchanged` failed once when run as
+part of the full gateway suite (token mismatch between what was sent and what was recorded as
+forwarded) but passed cleanly both in isolation and on a repeat full-suite run — looks like
+cross-test interference (shared `MockWebServer` state, or the Retry filter replaying a GET) rather
+than a real bug. Flagged, not fixed — worth a look if it recurs (this is the same class of latent
+`MockWebServer`-state issue first flagged, but left unfixed in `BookingRouteTest`, back in the
+"Gateway fix — booking + event routes wired up" entry above).
+
+**4-agent parallel review** (`backend-architecture`, `code-reviewer`, `domain-review`,
+`frontend-architecture`) ran against commit `2455d31`:
+
+- `domain-review`: no mismatches with ADR-0004/ADR-0005/`business-rules.md`. Suggested (not done)
+  that `business-rules.md` could gain an explicit edge-path note for the same-user-different-seats
+  race, since today only ADR-0004 documents it.
+- `frontend-architecture`: no frontend changes needed — pure backend/gateway fix, no API contract
+  change.
+- `backend-architecture` + `code-reviewer` both **independently found the same real bug**:
+  `persistHoldWithRetry`'s `catch (DataIntegrityViolationException)` was too broad (would silently
+  retry/mask any integrity violation, not just the intended race), and — more seriously — when
+  retries were exhausted the resulting exception wasn't a `SeatUnavailableException`, so
+  `holdSeats`'s Redis-lock cleanup never ran: the seats a losing request had locked stayed locked
+  for the full ~10-minute hold TTL with no corresponding booking. Also flagged, not fixed, tracked
+  as a future ADR candidate: `SagaCompletionService`'s new `afterCommit` claim ordering has no
+  interaction with `KafkaOutboxPublisher`'s durability — there's still no durable outbox
+  table/relay, just an in-process `afterCommit` listener, so a Kafka-send failure between commit
+  and the listener firing can still silently drop a `BookingConfirmed`/`BookingCancelled` event.
+  Worth a short ADR note eventually, not urgent.
+
+The real bug found above was fixed via a `backend-service` agent, verified with compile + the full
+booking test suite (37 tests, all green) again, and committed as `7d67ccc` "fix(booking): narrow
+race-loss catch and stop Redis lock leak on retry exhaustion":
+
+- `persistHoldWithRetry` now checks the violation is actually against
+  `uq_bookings_user_event_pending` (via `getMostSpecificCause().getMessage()`) before treating it
+  as a race loss; any other integrity violation fails fast instead of being silently retried.
+- `holdSeats` now releases acquired Redis locks on **any** `RuntimeException`, not just
+  `SeatUnavailableException`.
+- New `BookingContentionException` (409 problem+json) for the genuine exhausted-retry case, plus a
+  `GlobalExceptionHandler` safety-net mapping for any other unexpected
+  `DataIntegrityViolationException` (500 problem+json) — previously that class had no handler at
+  all and fell through to Spring Boot's default (non-problem+json) error body.
+
+Commits: `2455d31`, `7d67ccc`.
+
 ## Environment (this machine)
 
 Installed and verified working during Phase 2 — a fresh session should just re-verify, not
@@ -750,7 +824,8 @@ reinstall, unless one of these checks fails:
 
 ## Next up: decide Playwright (scaffold vs. defer), then Phase 14 (admin, optional/last)
 
-**Phases 1–13 are all done.** The next real decision, not yet made by any agent, is **Playwright**:
+**Phases 1–13 are all done, plus the 2026-09-09 saga/gateway review-and-fix pass above (HEAD is
+`7d67ccc`).** The next real decision, not yet made by any agent, is **Playwright**:
 scaffold the E2E suite now, or make an explicit, logged decision to defer it further. This has been
 flagged since Phase 12, was still open through Phase 13 shipping, and remains the top item —
 `docs/roadmap.md` calls a full Playwright suite (happy path, force-fail payment, short-TTL expiry,
