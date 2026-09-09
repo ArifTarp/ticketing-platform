@@ -29,14 +29,18 @@ was followed.
 ## Current state (as of 2026-09-09)
 
 **All 14 phases in `docs/roadmap.md` (1 through 14) are complete and committed. The app has also
-had a full visual redesign, its first real Playwright E2E suite, and — most recently — its first
-full-app parallel-agent review + live-browser-test pass since the redesign.** Current HEAD is
-`3ee4ca3` "fix: address findings from full-app review + live UI test pass" (application code:
-booking backend fix + frontend fixes + one doc-drift fix; see the "Full-app review + live UI test
-pass" entry under "What's done" for full detail). Immediately prior, `8957a08` was the docs commit
-logging the Claude Code tooling audit/fix pass whose actual code landed in `691b115` (agents/
-skills/hooks only, not application code; see the "Claude Code tooling audit/fix pass" entry under
-"What's done"). The full vertical slice (register/login → browse → hold seats → pay
+had a full visual redesign, its first real Playwright E2E suite, and its first full-app
+parallel-agent review + live-browser-test pass since the redesign.** Current HEAD is `1f636b6`
+"feat(claude-code): give every agent a matching skill; add app-runner agent" — Claude Code tooling
+only (no application code, no hooks changed); see the "Claude Code tooling: skill-gap fix +
+app-runner agent" entry under "What's done" for full detail. Immediately prior, `9f25250` was the
+docs commit logging the full-app review + live UI test pass whose actual code landed in `3ee4ca3`
+"fix: address findings from full-app review + live UI test pass" (application code: booking
+backend fix + frontend fixes + one doc-drift fix; see the "Full-app review + live UI test pass"
+entry under "What's done" for full detail). Before that, `8957a08` was the docs commit logging the
+Claude Code tooling audit/fix pass whose actual code landed in `691b115` (agents/skills/hooks only,
+not application code; see the "Claude Code tooling audit/fix pass" entry under "What's done"). The
+full vertical slice (register/login → browse → hold seats → pay
 (mock) → confirmed booking + notification, with the saga and timeout path) plus the admin screens
 (venue/event CRUD, ADMIN-gated) all ship under a new "control panel" dark/monospace-data-face
 design system (commit `b0dea0d`), and the long-standing "Playwright: scaffold or defer?" open item
@@ -1106,6 +1110,71 @@ redesign and Phase 14.
   fixed) — a good signal the app is in a solid state.
 - Commit: `3ee4ca3`.
 
+### Claude Code tooling: skill-gap fix + app-runner agent (2026-09-09)
+
+Committed as `1f636b6` "feat(claude-code): give every agent a matching skill; add app-runner
+agent" (previous HEAD `9f25250`, the docs commit for the full-app review pass above). **Not
+application code** — only `.claude/agents/` and `.claude/skills/` touched; no hooks changed. This
+directly extends the "Claude Code tooling audit/fix pass" entry above (`691b115`) rather than being
+unrelated follow-on work.
+
+The user asked two follow-up questions about this repo's Claude Code tooling: (1) is there an
+agent+skill for actually running the app, or should one be made, and (2) every agent should have a
+skill — go check and fix gaps, using Superpowers and two named external repos as sources where
+useful.
+
+- **Research done first**: read two external Claude Code agent collections by Ibrahim Ates,
+  `github.com/atesibrahim/cognia-agents` (13 read-only analysis agents, each with an
+  evidence-first/Confirmed-vs-Inferred discipline and each backed by its own matching skill under
+  `.claude/skills/<name>/`) and its fix-applying counterpart `github.com/atesibrahim/
+  praxia-agents`. Confirmed by reading both: **neither has any devops/launcher/run-the-app
+  agent** — their scope is entirely audit-and-fix, not runtime operations — so there was nothing
+  to directly borrow for the "run the app" question's content. What *was* worth adopting was their
+  agent-plus-matching-skill structural pattern (agent = short scope/persona pointer, skill = the
+  actual deep step-by-step procedure), applied more consistently across this repo's own agents —
+  not their literal domain content, which targets a different, general-purpose analysis problem.
+- **Gap found and confirmed file-by-file, not assumed**: 6 of this repo's 17 `.claude/agents/*.md`
+  files had zero skill reference at all — `backend-architecture`, `frontend-architecture`,
+  `domain-review`, `docker-infra`, `progress-keeper`, `workflow-rules` — prose-only, unlike
+  `code-reviewer` (already wrapped the Superpowers `code-review` skill) or the agents fixed in the
+  prior tooling pass. Fixed with **6 new dedicated project skills**, one per gap agent, each
+  formalizing that agent's existing scope into an explicit, evidence-first checklist (cite files,
+  tag Confirmed vs. Inferred, never assert from memory) — matching cognia/praxia's procedural
+  rigor but scoped to what each of *this repo's* agents actually does:
+  - `.claude/skills/backend-architecture/SKILL.md` — component-map/data-flow/boundary-risk audit
+    procedure, ADR-drafting shape.
+  - `.claude/skills/frontend-architecture/SKILL.md` — route/state-management/component-boundary/
+    data-fetching audit procedure.
+  - `.claude/skills/domain-review/SKILL.md` — doc-vs-code comparison procedure (business-rules.md/
+    user-flow.md/ADRs), neutral mismatch reporting.
+  - `.claude/skills/docker-infra/SKILL.md` — infra-change procedure emphasizing "verify by
+    actually running docker compose, not by reading the YAML," plus explicitly requiring
+    `run-ticketing-platform`'s runbook be kept in sync with any compose/Dockerfile change.
+  - `.claude/skills/progress-keeper/SKILL.md` — this very memory-log update procedure, formalized
+    (verify against git log first, update Current state, append What's done with the *why*, never
+    rewrite history).
+  - `.claude/skills/workflow-rules/SKILL.md` — business-rule/workflow authoring procedure (check
+    precedent, model cross-service workflows as Kafka events first, write with
+    implementation-grade precision, flag boundary conflicts instead of encoding them).
+  - Each of the 6 corresponding agent `.md` files was edited to explicitly invoke its matching
+    skill. **Result: all 17 agents in this repo now have at least one skill reference** (a
+    Superpowers skill, the built-in `design` skill, or one of these new dedicated project skills).
+- **New agent: `.claude/agents/app-runner.md`**, wrapping the already-existing
+  `run-ticketing-platform` skill (built in the prior tooling pass, `691b115`) 1:1. This reverses
+  that prior pass's "skill-only, no dedicated agent" decision — on reflection, background tasks a
+  subagent starts are tracked at the session level (visible to the parent via `TaskList`/
+  `ListAgents` after the subagent itself finishes), so the earlier concern about a subagent losing
+  track of long-lived background processes across turns doesn't actually hold. `app-runner` is
+  scoped narrowly to start/status/stop via the skill's runbook; it never touches
+  `docker-compose.yml`, a `Dockerfile`, or `application.yml` — `docker-infra`'s "Hand off when"
+  section now points to `app-runner` for actually running the stack, keeping "owns the compose
+  definition" cleanly separate from "runs what's already defined."
+- **Verification**: this is Claude Code config/docs only — no application code, no hooks changed.
+  Verified all 17 agent files have valid frontmatter and at least one skill reference (checked by
+  grep, not assumed); `.githooks/pre-commit` fired correctly on the commit (no frontend/backend
+  files touched, so both its gates correctly no-opped).
+- Commit: `1f636b6`.
+
 ## Environment (this machine)
 
 Installed and verified working during Phase 2 — a fresh session should just re-verify, not
@@ -1185,12 +1254,22 @@ reinstall, unless one of these checks fails:
 ## Next up
 
 **All 14 roadmap phases are done; the UI redesign, the Playwright decision, the Claude Code
-tooling audit, and — as of `3ee4ca3` — the first full-app parallel-agent review + live-browser-test
-pass since the redesign are all also resolved.** There is no single next mandatory task; pick from
-the open items below based on priority. The Playwright scaffold-vs-defer decision that had been
-open since Phase 12 is now closed: Playwright is set up (`frontend/playwright.config.ts`,
-`frontend/e2e/`, 8 specs) with real, passing golden-path and admin-flow runs against a live stack —
-do not re-flag this as open in future sessions.
+tooling audit, the first full-app parallel-agent review + live-browser-test pass since the
+redesign (`3ee4ca3`), and — as of `1f636b6` — the "does app-runner exist" and "does every agent
+have a skill" follow-up questions are all also resolved.** There is no single next mandatory
+task; pick from the open items below based on priority. The Playwright scaffold-vs-defer decision
+that had been open since Phase 12 is now closed: Playwright is set up
+(`frontend/playwright.config.ts`, `frontend/e2e/`, 8 specs) with real, passing golden-path and
+admin-flow runs against a live stack — do not re-flag this as open in future sessions.
+
+**RESOLVED this session (2026-09-09, commit `1f636b6`): every agent now has a skill, and
+`app-runner` exists.** All 17 `.claude/agents/*.md` files have at least one skill reference (6 new
+dedicated project skills added for the 6 that had none); `.claude/agents/app-runner.md` wraps
+`run-ticketing-platform` for start/status/stop of the local stack. Do not re-flag either of these
+as open in future sessions — see the "Claude Code tooling: skill-gap fix + app-runner agent" entry
+above for detail. The `docker-compose`/Dockerfile completeness gap below is unaffected by this —
+`app-runner` only runs what's already defined; it doesn't create compose entries or Dockerfiles,
+that's still `docker-infra`'s job.
 
 **New backlog item, first called out explicitly here (not a new fact — already documented as
 deliberate in each service's own `CLAUDE.md`, re-flagged by `code-reviewer` in the 2026-09-09
