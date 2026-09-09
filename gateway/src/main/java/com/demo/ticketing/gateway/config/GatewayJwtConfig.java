@@ -3,14 +3,23 @@ package com.demo.ticketing.gateway.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.ReactiveJwtAuthenticationConverterAdapter;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.util.Collection;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Edge JWT validation: HMAC (symmetric) verification against the same shared secret the auth
@@ -51,5 +60,31 @@ public class GatewayJwtConfig {
         return NimbusReactiveJwtDecoder.withSecretKey(signingKey)
                 .macAlgorithm(MacAlgorithm.from(macAlgorithmName))
                 .build();
+    }
+
+    /**
+     * Maps the {@code roles} claim (a JSON array such as {@code ["ADMIN"]}, as issued by auth —
+     * see root {@code CLAUDE.md}) to Spring Security {@code ROLE_*} authorities, so
+     * {@code .hasRole("ADMIN")} in {@link SecurityConfig} works.
+     *
+     * <p>Spring Security's {@code hasRole(x)} auto-prefixes {@code ROLE_} when checking, so the
+     * authority produced here must be exactly {@code ROLE_<value>} — never double-prefixed.
+     */
+    @Bean
+    public ReactiveJwtAuthenticationConverterAdapter jwtAuthenticationConverter() {
+        Converter<Jwt, Collection<GrantedAuthority>> rolesConverter = jwt -> {
+            List<String> roles = jwt.getClaimAsStringList("roles");
+            if (roles == null) {
+                return List.of();
+            }
+            return roles.stream()
+                    .filter(Objects::nonNull)
+                    .map(role -> (GrantedAuthority) new SimpleGrantedAuthority("ROLE_" + role))
+                    .toList();
+        };
+
+        JwtAuthenticationConverter delegate = new JwtAuthenticationConverter();
+        delegate.setJwtGrantedAuthoritiesConverter(rolesConverter);
+        return new ReactiveJwtAuthenticationConverterAdapter(delegate);
     }
 }

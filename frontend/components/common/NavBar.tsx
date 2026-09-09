@@ -5,6 +5,7 @@ import { useAuth } from "@/context/SessionProvider";
 
 export function NavBar() {
   const { isAuthenticated, user, logout } = useAuth();
+  const isAdmin = Boolean(user?.roles.includes("ADMIN"));
 
   return (
     <header className="border-b border-zinc-200 bg-white">
@@ -21,6 +22,11 @@ export function NavBar() {
               <Link href="/tickets" className="text-zinc-600 hover:text-zinc-900">
                 My tickets
               </Link>
+              {isAdmin && (
+                <Link href="/admin/events" className="text-zinc-600 hover:text-zinc-900">
+                  Admin
+                </Link>
+              )}
               <span className="text-zinc-500">{user?.email}</span>
               <button
                 type="button"

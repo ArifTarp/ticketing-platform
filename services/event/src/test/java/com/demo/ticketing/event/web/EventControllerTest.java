@@ -207,4 +207,187 @@ class EventControllerTest {
         assertThat(counts.get("seats")).isEqualTo(78L);
         assertThat(counts.get("categories")).isEqualTo(6L);
     }
+
+    private ResponseEntity<JsonNode> post(String path, Object body) {
+        return restTemplate.postForEntity(path, body, JsonNode.class);
+    }
+
+    private long seedVenueId() {
+        return jdbcTemplate.queryForObject("SELECT id FROM venues LIMIT 1", Long.class);
+    }
+
+    @Test
+    void createVenueReturns201WithTheCreatedVenue() {
+        Map<String, String> body = Map.of(
+                "name", "New Venue " + Instant.now().toEpochMilli(),
+                "address", "123 Main St",
+                "city", "Ankara");
+
+        ResponseEntity<JsonNode> response = post("/api/v1/venues", body);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        JsonNode created = response.getBody();
+        assertThat(created.get("id").asLong()).isPositive();
+        assertThat(created.get("name").asText()).isEqualTo(body.get("name"));
+        assertThat(created.get("address").asText()).isEqualTo("123 Main St");
+        assertThat(created.get("city").asText()).isEqualTo("Ankara");
+
+        // Tests share one Postgres container/schema (no per-test rollback) — clean up so
+        // seedDataIsPresentForTheDemo's counts stay accurate regardless of execution order.
+        jdbcTemplate.update("DELETE FROM venues WHERE id = ?", created.get("id").asLong());
+    }
+
+    @Test
+    void createVenueReturns400ProblemDetailWhenAFieldIsBlank() {
+        Map<String, String> body = Map.of("name", "", "address", "123 Main St", "city", "Ankara");
+
+        ResponseEntity<JsonNode> response = post("/api/v1/venues", body);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON);
+    }
+
+    @Test
+    void createEventReturns201WithTheCreatedEventDefaultingStatusToDraft() {
+        long venueId = seedVenueId();
+        Map<String, Object> body = Map.of(
+                "venueId", venueId,
+                "title", "New Admin Event " + Instant.now().toEpochMilli(),
+                "description", "created by an admin test",
+                "startsAt", Instant.now().plus(30, ChronoUnit.DAYS).toString());
+
+        ResponseEntity<JsonNode> response = post("/api/v1/events", body);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        JsonNode created = response.getBody();
+        assertThat(created.get("id").asLong()).isPositive();
+        assertThat(created.get("title").asText()).isEqualTo(body.get("title"));
+        assertThat(created.get("status").asText()).isEqualTo("DRAFT");
+        assertThat(created.get("venue").get("id").asLong()).isEqualTo(venueId);
+        assertThat(created.get("seatCategories")).isEmpty();
+
+        jdbcTemplate.update("DELETE FROM events WHERE id = ?", created.get("id").asLong());
+    }
+
+    @Test
+    void createEventReturns404ProblemDetailWhenVenueDoesNotExist() {
+        Map<String, Object> body = Map.of(
+                "venueId", 999999,
+                "title", "Orphan Event",
+                "startsAt", Instant.now().plus(30, ChronoUnit.DAYS).toString());
+
+        ResponseEntity<JsonNode> response = post("/api/v1/events", body);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON);
+    }
+
+    @Test
+    void createEventReturns400ProblemDetailWhenTitleIsMissing() {
+        long venueId = seedVenueId();
+        Map<String, Object> body = Map.of(
+                "venueId", venueId,
+                "startsAt", Instant.now().plus(30, ChronoUnit.DAYS).toString());
+
+        ResponseEntity<JsonNode> response = post("/api/v1/events", body);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON);
+    }
+
+    @Test
+    void addSeatCategoriesReturns201WithTheCreatedTiers() {
+        long eventId = eventIdByTitle("Midnight Rehearsal"); // DRAFT seed event, no pre-existing tiers
+        List<Map<String, Object>> body = List.of(
+                Map.of("name", "Front Row " + Instant.now().toEpochMilli(), "price", 99.50, "section", "A"),
+                Map.of("name", "Rear " + Instant.now().toEpochMilli(), "price", 45.00, "section", "C"));
+
+        ResponseEntity<JsonNode> response = post("/api/v1/events/" + eventId + "/seat-categories", body);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        JsonNode created = response.getBody();
+        assertThat(created).hasSize(2);
+        assertThat(created.get(0).get("id").asLong()).isPositive();
+        assertThat(created.get(0).get("price").decimalValue()).isEqualByComparingTo("99.50");
+
+        jdbcTemplate.update("DELETE FROM seat_categories WHERE id IN (?, ?)",
+                created.get(0).get("id").asLong(), created.get(1).get("id").asLong());
+    }
+
+    @Test
+    void addSeatCategoriesReturns404ProblemDetailWhenEventDoesNotExist() {
+        List<Map<String, Object>> body = List.of(Map.of("name", "VIP", "price", 10.00, "section", "A"));
+
+        ResponseEntity<JsonNode> response = post("/api/v1/events/999999/seat-categories", body);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON);
+    }
+
+    @Test
+    void addSeatCategoriesReturns400ProblemDetailWhenBodyIsEmpty() {
+        long eventId = eventIdByTitle("Midnight Rehearsal");
+
+        ResponseEntity<JsonNode> response = post("/api/v1/events/" + eventId + "/seat-categories", List.of());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON);
+    }
+
+    @Test
+    void addSeatCategoriesReturns409ProblemDetailWhenSectionAlreadyPricedForThatEvent() {
+        long eventId = eventIdByTitle("Neon Nights Live"); // already prices section A (VIP)
+        List<Map<String, Object>> body = List.of(Map.of("name", "Fresh Name", "price", 10.00, "section", "A"));
+
+        ResponseEntity<JsonNode> response = post("/api/v1/events/" + eventId + "/seat-categories", body);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON);
+    }
+
+    @Test
+    void adminListEventsReturnsEveryStatusIncludingDraftAndClosed() {
+        ResponseEntity<JsonNode> response = get("/api/v1/admin/events");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        JsonNode body = response.getBody();
+        assertThat(body).isNotNull();
+        // Unlike the public GET /api/v1/events, DRAFT and CLOSED events are included here.
+        assertThat(titlesOf(body)).contains(
+                "Neon Nights Live", "Acoustic Evening", "Midnight Rehearsal", "Retro Fest");
+
+        JsonNode draft = null;
+        for (JsonNode event : body) {
+            if (event.get("title").asText().equals("Midnight Rehearsal")) {
+                draft = event;
+            }
+        }
+        assertThat(draft).isNotNull();
+        assertThat(draft.get("status").asText()).isEqualTo("DRAFT");
+    }
+
+    @Test
+    void adminListEventsFiltersByCityCaseInsensitivelySameAsThePublicEndpoint() {
+        JsonNode body = get("/api/v1/admin/events?city=istanbul").getBody();
+
+        // Demo Arena (Istanbul) hosts Neon Nights Live (ON_SALE), Midnight Rehearsal (DRAFT) and
+        // Retro Fest (CLOSED); Riverside Hall (Acoustic Evening) is a different city.
+        assertThat(titlesOf(body)).containsExactlyInAnyOrder(
+                "Neon Nights Live", "Midnight Rehearsal", "Retro Fest");
+    }
+
+    @Test
+    void adminListEventsFiltersByFreeTextTitleSearch() {
+        JsonNode body = get("/api/v1/admin/events?q=retro").getBody();
+
+        assertThat(titlesOf(body)).containsExactly("Retro Fest");
+    }
+
+    @Test
+    void adminListEventsReturnsAnEmptyArrayWhenNothingMatches() {
+        JsonNode body = get("/api/v1/admin/events?city=Atlantis").getBody();
+
+        assertThat(body.isArray()).isTrue();
+        assertThat(body).isEmpty();
+    }
 }

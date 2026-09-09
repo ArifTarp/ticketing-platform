@@ -109,6 +109,63 @@ spring:
                   maxBackoff: 200ms
                   factor: 2
                   basedOnPreviousValue: false
+        # --- venue (Phase 14) -------------------------------------------------------------------
+        # Same target service as event (`${services.event.uri}`) — event owns both venues and
+        # events in its catalog DB, it just exposes them under two different resource prefixes.
+        # Protected: POST /api/v1/venues requires ADMIN (see SecurityConfig); this route only
+        # carries writes today, but Retry is kept GET-only for consistency and any future GET
+        # endpoints under this prefix.
+        - id: venue
+          uri: ${services.event.uri}
+          predicates:
+            - Path=/api/v1/venues/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: venueCircuitBreaker
+                fallbackUri: forward:/fallback/venue
+            - name: Retry
+              args:
+                retries: 2
+                methods: GET
+                series: SERVER_ERROR
+                exceptions:
+                  - java.io.IOException
+                  - java.util.concurrent.TimeoutException
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 200ms
+                  factor: 2
+                  basedOnPreviousValue: false
+        # --- admin (Phase 14) -------------------------------------------------------------------
+        # Same target service as event (`${services.event.uri}`) — `GET /api/v1/admin/events`
+        # exposes the admin events table (all statuses) alongside the public ON_SALE-only
+        # `GET /api/v1/events`, under a separate prefix so the two rules stay independent in
+        # SecurityConfig. Protected: GET /api/v1/admin/** requires ADMIN (see SecurityConfig).
+        # This route only carries GET today, but Retry is kept GET-only for consistency with the
+        # other routes above.
+        - id: admin
+          uri: ${services.event.uri}
+          predicates:
+            - Path=/api/v1/admin/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: adminEventCircuitBreaker
+                fallbackUri: forward:/fallback/admin
+            - name: Retry
+              args:
+                retries: 2
+                methods: GET
+                series: SERVER_ERROR
+                exceptions:
+                  - java.io.IOException
+                  - java.util.concurrent.TimeoutException
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 200ms
+                  factor: 2
+                  basedOnPreviousValue: false
 
 # The frontend origin allowed to make cross-origin requests. Read by both the globalcors block
 # above (for normal proxied responses) and ProblemDetailResponseWriter (for the 401/403/503
@@ -162,6 +219,10 @@ resilience4j:
         baseConfig: default
       eventCircuitBreaker:
         baseConfig: default
+      venueCircuitBreaker:
+        baseConfig: default
+      adminEventCircuitBreaker:
+        baseConfig: default
   timelimiter:
     configs:
       default:
@@ -173,6 +234,10 @@ resilience4j:
       bookingCircuitBreaker:
         baseConfig: default
       eventCircuitBreaker:
+        baseConfig: default
+      venueCircuitBreaker:
+        baseConfig: default
+      adminEventCircuitBreaker:
         baseConfig: default
 
 management:

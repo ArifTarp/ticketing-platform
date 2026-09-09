@@ -1,0 +1,118 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { fetchAdminEvents } from "@/lib/adminApi";
+import { ApiRequestError } from "@/lib/apiClient";
+import { formatEventDate } from "@/lib/formatDate";
+import type { EventSummaryResponse } from "@/types/event";
+import { EmptyState } from "@/components/common/EmptyState";
+import { EventStatusBadge } from "@/components/events/EventStatusBadge";
+
+const SKELETON_ROW_COUNT = 4;
+
+interface EventTableProps {
+  /** Bumping this value re-triggers the fetch — used to refetch after a successful create. */
+  reloadToken: number;
+  onEdit: (event: EventSummaryResponse) => void;
+}
+
+/**
+ * List container for the admin events table (docs/user-flow.md screen 8) — owns fetch +
+ * loading/empty/error/loaded state, same pattern as EventList (screen 2), but sources from
+ * GET /api/v1/admin/events (ADMIN-only, every status) instead of the public fetchEvents().
+ */
+export function EventTable({ reloadToken, onEdit }: EventTableProps) {
+  const [events, setEvents] = useState<EventSummaryResponse[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [retryToken, setRetryToken] = useState(0);
+
+  const loadEvents = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await fetchAdminEvents();
+      setEvents(result);
+    } catch (err) {
+      setEvents(null);
+      setError(err instanceof ApiRequestError ? err.detail : "Failed to load events.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadEvents();
+  }, [loadEvents, reloadToken, retryToken]);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-2">
+        {Array.from({ length: SKELETON_ROW_COUNT }).map((_, index) => (
+          <div key={index} className="h-12 animate-pulse rounded-md bg-zinc-100" />
+        ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <EmptyState
+        title="Couldn't load events"
+        description={error}
+        action={
+          <button
+            type="button"
+            onClick={() => setRetryToken((prev) => prev + 1)}
+            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
+          >
+            Retry
+          </button>
+        }
+      />
+    );
+  }
+
+  if (!events || events.length === 0) {
+    return <EmptyState title="No events yet" description="Create one to get started." />;
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
+      <table className="w-full text-left text-sm">
+        <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
+          <tr>
+            <th className="px-4 py-3 font-medium">Title</th>
+            <th className="px-4 py-3 font-medium">Venue</th>
+            <th className="px-4 py-3 font-medium">Starts at</th>
+            <th className="px-4 py-3 font-medium">Status</th>
+            <th className="px-4 py-3 font-medium">
+              <span className="sr-only">Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-zinc-100">
+          {events.map((event) => (
+            <tr key={event.id}>
+              <td className="px-4 py-3 font-medium text-zinc-900">{event.title}</td>
+              <td className="px-4 py-3 text-zinc-600">{event.venueName}</td>
+              <td className="px-4 py-3 text-zinc-600">{formatEventDate(event.startsAt)}</td>
+              <td className="px-4 py-3">
+                <EventStatusBadge status={event.status} />
+              </td>
+              <td className="px-4 py-3 text-right">
+                <button
+                  type="button"
+                  onClick={() => onEdit(event)}
+                  className="text-sm font-medium text-zinc-600 hover:text-zinc-900"
+                >
+                  Edit
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}

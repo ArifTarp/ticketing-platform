@@ -69,3 +69,33 @@ export interface EventFilterParams {
   from?: string;
   to?: string;
 }
+
+/** POST /api/v1/venues body — mirrors services/event's CreateVenueRequest (Phase 14, admin-only). */
+export interface CreateVenueRequest {
+  name: string;
+  address: string;
+  city: string;
+}
+
+/**
+ * POST /api/v1/events body — mirrors services/event's CreateEventRequest (Phase 14, admin-only).
+ * `status` is optional and defaults to `DRAFT` server-side when omitted.
+ */
+export interface CreateEventRequest {
+  venueId: number;
+  title: string;
+  description: string;
+  startsAt: string;
+  status?: EventStatus;
+}
+
+/**
+ * One item of POST /api/v1/events/{eventId}/seat-categories's request body (a raw JSON array of
+ * these) — mirrors services/event's CreateSeatCategoryRequest. `section` is how the tier attaches
+ * to physical seats; no `id` since these are always new rows (the endpoint only adds, never edits).
+ */
+export interface CreateSeatCategoryRequest {
+  name: string;
+  price: number;
+  section: string;
+}

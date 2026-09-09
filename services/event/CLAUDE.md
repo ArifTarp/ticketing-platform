@@ -38,6 +38,7 @@ booking service (`seat_availability` + Redis holds). Concretely:
 | `GET /api/v1/events` | `EventSummaryResponse[]` — id, title, venueName, city, startsAt, status, `fromPrice` (lowest tier). **Only `ON_SALE` events.** Optional filters `?city=&q=&from=&to=`; `city` is exact/case-insensitive, `q` is a case-insensitive title contains, `from`/`to` are ISO-8601 instants bounding `startsAt`. |
 | `GET /api/v1/events/{eventId}` | `EventResponse` — detail + venue + price tiers (highest price first) + `bookable`. Any status (a direct link to a `SOLD_OUT`/`CLOSED` event must still render). 404 problem+json if missing. |
 | `GET /api/v1/events/{eventId}/seats` | `SeatMapResponse` — `{eventId, venueId, seats[]}` where each seat is `{seatId, section, row, number, seatCategory{id,name,price}}`. **Layout only, no availability.** 404 problem+json if missing. |
+| `GET /api/v1/admin/events` | `EventSummaryResponse[]` — same shape and same optional `?city=&q=&from=&to=` filters as `GET /api/v1/events`, but **every status** (`DRAFT`/`ON_SALE`/`SOLD_OUT`/`CLOSED`), for the admin events table. Distinct path prefix on purpose: the gateway gates `/api/v1/admin/**` on `hasRole("ADMIN")` by path, so this service adds no local JWT/role check (see "Not here (deliberately)"). |
 
 No paging yet: the demo catalog is a handful of events, and a paging envelope is a response-contract
 decision better made when the list actually needs it (roadmap Phase 11/14).
@@ -78,8 +79,10 @@ Consequences:
 
 ## Not here (deliberately)
 
-- **No security/JWT.** The catalog reads are public. Admin write endpoints (`POST /venues`,
-  `/events`, …) come in roadmap Phase 14 and will need local JWT validation + `ADMIN` role.
+- **No security/JWT.** The catalog reads are public. Admin endpoints (`POST /venues`, `POST
+  /events`, `POST /events/{id}/seat-categories`, `GET /admin/events`, roadmap Phase 14) rely
+  entirely on the gateway's path-based `ADMIN` role gate — this service does no local JWT/role
+  validation of its own.
 - **No Kafka.** event neither produces nor consumes; it is not part of the checkout saga.
 - **No OpenTelemetry/JSON logging yet** — cross-cutting stretch phase per `docs/roadmap.md`,
   consistent with the other services.

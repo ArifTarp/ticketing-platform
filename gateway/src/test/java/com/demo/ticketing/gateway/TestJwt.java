@@ -38,6 +38,12 @@ final class TestJwt {
         return signed(JWSAlgorithm.HS512, SECRET, now, now.plusSeconds(3600));
     }
 
+    /** Same as {@link #valid()} but with an ADMIN role, for the Phase 14 role-gated routes. */
+    static String validAdmin() {
+        Instant now = Instant.now();
+        return signed(JWSAlgorithm.HS512, SECRET, now, now.plusSeconds(3600), List.of("ADMIN"));
+    }
+
     /** Right secret and algorithm, but the expiry is already in the past. */
     static String expired() {
         Instant now = Instant.now();
@@ -57,10 +63,15 @@ final class TestJwt {
     }
 
     static String signed(JWSAlgorithm algorithm, String secret, Instant issuedAt, Instant expiresAt) {
+        return signed(algorithm, secret, issuedAt, expiresAt, List.of("USER"));
+    }
+
+    static String signed(JWSAlgorithm algorithm, String secret, Instant issuedAt, Instant expiresAt,
+                          List<String> roles) {
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
                 .subject("42")
                 .claim("email", "alice@example.com")
-                .claim("roles", List.of("USER"))
+                .claim("roles", roles)
                 .issueTime(Date.from(issuedAt))
                 .expirationTime(Date.from(expiresAt))
                 .build();

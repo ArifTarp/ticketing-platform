@@ -52,4 +52,27 @@ public interface EventRepository extends JpaRepository<Event, Long> {
             where e.id = :id
             """)
     Optional<Event> findDetailById(@Param("id") Long id);
+
+    /**
+     * Admin listing (roadmap Phase 14): same optional filters as {@link #findForBrowse}, but every
+     * status is returned — no {@code status} predicate at all, not even a nullable one, so this
+     * intentionally does not reuse the same query with a null status parameter (see this service's
+     * CLAUDE.md "Implementation notes / traps" on nullable-parameter bind-type failures on Postgres).
+     * Callers (the gateway's {@code /api/v1/admin/**} role gate) are responsible for restricting
+     * this to ADMIN — see {@code EventController}'s Javadoc.
+     */
+    @Query("""
+            select distinct e from Event e
+            join fetch e.venue v
+            left join fetch e.seatCategories
+            where (:city is null or lower(v.city) = :city)
+              and (:titlePattern is null or lower(e.title) like :titlePattern)
+              and e.startsAt >= :from
+              and e.startsAt <= :to
+            order by e.startsAt asc
+            """)
+    List<Event> findForAdmin(@Param("city") String city,
+                             @Param("titlePattern") String titlePattern,
+                             @Param("from") Instant from,
+                             @Param("to") Instant to);
 }

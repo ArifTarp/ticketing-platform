@@ -94,6 +94,11 @@ public class EventMapper {
                 toSeatCategoryDto(category));
     }
 
+    /** Used by the admin seat-category create endpoint to shape its response. */
+    public List<SeatCategoryDto> toSeatCategoryDtos(List<SeatCategory> categories) {
+        return categories.stream().map(this::toSeatCategoryDto).toList();
+    }
+
     private SeatCategoryDto toSeatCategoryDto(SeatCategory category) {
         return new SeatCategoryDto(category.getId(), category.getName(), category.getPrice());
     }

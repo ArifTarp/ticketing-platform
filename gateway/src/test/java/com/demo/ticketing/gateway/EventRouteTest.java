@@ -131,6 +131,69 @@ class EventRouteTest {
     }
 
     @Test
+    void postEventsWithoutTokenIsRejectedWith401AndNeverReachesEvent() {
+        int before = EVENT_STUB.getRequestCount();
+
+        client.post().uri("/api/v1/events")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"title\":\"Rock Night\"}")
+                .exchange()
+                .expectStatus().isUnauthorized()
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON);
+
+        assertThat(EVENT_STUB.getRequestCount() - before).isZero();
+    }
+
+    @Test
+    void postEventsWithUserRoleTokenIsForbiddenAndNeverReachesEvent() {
+        int before = EVENT_STUB.getRequestCount();
+
+        client.post().uri("/api/v1/events")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestJwt.valid())
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"title\":\"Rock Night\"}")
+                .exchange()
+                .expectStatus().isForbidden()
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON);
+
+        assertThat(EVENT_STUB.getRequestCount() - before).isZero();
+    }
+
+    @Test
+    void postEventsWithAdminRoleTokenIsForwardedToEvent() throws InterruptedException {
+        EVENT_STUB.enqueue(new MockResponse()
+                .setResponseCode(201)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"id\":1,\"title\":\"Rock Night\"}"));
+
+        client.post().uri("/api/v1/events")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestJwt.validAdmin())
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"title\":\"Rock Night\"}")
+                .exchange()
+                .expectStatus().isCreated();
+
+        RecordedRequest forwarded = EVENT_STUB.takeRequest();
+        assertThat(forwarded.getMethod()).isEqualTo("POST");
+        assertThat(forwarded.getPath()).isEqualTo("/api/v1/events");
+        assertThat(forwarded.getBody().readUtf8()).isEqualTo("{\"title\":\"Rock Night\"}");
+    }
+
+    @Test
+    void postSeatCategoriesSubPathWithUserRoleTokenIsForbidden() {
+        int before = EVENT_STUB.getRequestCount();
+
+        client.post().uri("/api/v1/events/1/seat-categories")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestJwt.valid())
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"name\":\"VIP\",\"price\":100}")
+                .exchange()
+                .expectStatus().isForbidden();
+
+        assertThat(EVENT_STUB.getRequestCount() - before).isZero();
+    }
+
+    @Test
     void idempotentGetIsRetriedOnServerError() throws InterruptedException {
         int before = EVENT_STUB.getRequestCount();
         EVENT_STUB.enqueue(new MockResponse().setResponseCode(500));

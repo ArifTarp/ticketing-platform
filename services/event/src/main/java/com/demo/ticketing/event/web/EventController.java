@@ -1,13 +1,20 @@
 package com.demo.ticketing.event.web;
 
 import com.demo.ticketing.event.application.EventService;
+import com.demo.ticketing.event.web.dto.CreateEventRequest;
+import com.demo.ticketing.event.web.dto.CreateSeatCategoryRequest;
 import com.demo.ticketing.event.web.dto.EventResponse;
 import com.demo.ticketing.event.web.dto.EventSummaryResponse;
+import com.demo.ticketing.event.web.dto.SeatCategoryDto;
 import com.demo.ticketing.event.web.dto.SeatMapResponse;
+import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,7 +23,11 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Read-only catalog endpoints.
+ * Catalog endpoints: the original public read-only browse/detail/seat-map GETs, plus the admin
+ * write endpoints added in roadmap Phase 14 ({@code POST /events}, {@code POST
+ * /events/{eventId}/seat-categories}). The gateway is responsible for rejecting non-ADMIN callers
+ * on the write routes before the request reaches here — see services/event/CLAUDE.md's
+ * "Not here (deliberately)" note; this controller does not itself check any role/JWT.
  *
  * <p>Every {@code @RequestParam}/{@code @PathVariable} names its parameter explicitly on purpose.
  * The Maven parent is a plain aggregator rather than {@code spring-boot-starter-parent}, so
@@ -62,5 +73,25 @@ public class EventController {
     @GetMapping("/{eventId}/seats")
     public ResponseEntity<SeatMapResponse> getEventSeats(@PathVariable("eventId") Long eventId) {
         return ResponseEntity.ok(eventService.getSeatMap(eventId));
+    }
+
+    /** Admin create (roadmap Phase 14). 404 problem+json if {@code venueId} does not exist. */
+    @PostMapping
+    public ResponseEntity<EventResponse> createEvent(@Valid @RequestBody CreateEventRequest request) {
+        EventResponse response = eventService.createEvent(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * Admin create (roadmap Phase 14): adds one or more price tiers to an existing event. 404
+     * problem+json if {@code eventId} does not exist; 409 problem+json if a name/section already
+     * used by this event is submitted again.
+     */
+    @PostMapping("/{eventId}/seat-categories")
+    public ResponseEntity<List<SeatCategoryDto>> addSeatCategories(
+            @PathVariable("eventId") Long eventId,
+            @Valid @RequestBody List<@Valid CreateSeatCategoryRequest> requests) {
+        List<SeatCategoryDto> response = eventService.addSeatCategories(eventId, requests);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }
