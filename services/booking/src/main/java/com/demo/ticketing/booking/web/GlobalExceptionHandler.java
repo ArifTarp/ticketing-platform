@@ -1,9 +1,11 @@
 package com.demo.ticketing.booking.web;
 
+import com.demo.ticketing.booking.application.exception.BookingContentionException;
 import com.demo.ticketing.booking.application.exception.BookingNotFoundException;
 import com.demo.ticketing.booking.application.exception.BookingNotPendingException;
 import com.demo.ticketing.booking.application.exception.InvalidHoldRequestException;
 import com.demo.ticketing.booking.application.exception.SeatUnavailableException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
@@ -40,6 +42,27 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BookingNotPendingException.class)
     public ResponseEntity<ProblemDetail> handleBookingNotPending(BookingNotPendingException ex) {
         return problem(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    /**
+     * {@code BookingHoldService.persistHoldWithRetry} exhausted its retries on the genuine
+     * {@code uq_bookings_user_event_pending} PENDING-booking race — real, if rare, contention, not
+     * a bug.
+     */
+    @ExceptionHandler(BookingContentionException.class)
+    public ResponseEntity<ProblemDetail> handleBookingContention(BookingContentionException ex) {
+        return problem(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    /**
+     * Safety net for a {@link DataIntegrityViolationException} that is NOT the
+     * {@code uq_bookings_user_event_pending} race (see {@code BookingHoldService.persistHoldWithRetry})
+     * — an unexpected DB constraint violation. Degrades to problem+json instead of Spring Boot's
+     * default error body; the raw SQL exception message is deliberately not exposed to the client.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ProblemDetail> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        return problem(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected data integrity error occurred");
     }
 
     /** Bean-validation failures on {@code @Valid @RequestBody} DTOs, e.g. {@code HoldBookingRequest}. */

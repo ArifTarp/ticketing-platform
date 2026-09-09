@@ -1,5 +1,6 @@
 package com.demo.ticketing.booking.application;
 
+import com.demo.ticketing.booking.application.exception.BookingContentionException;
 import com.demo.ticketing.booking.application.exception.InvalidHoldRequestException;
 import com.demo.ticketing.booking.application.exception.SeatUnavailableException;
 import com.demo.ticketing.booking.application.mapper.BookingMapper;
@@ -59,6 +60,16 @@ public class BookingHoldService {
      */
     private static final int MAX_PENDING_BOOKING_INSERT_ATTEMPTS = 5;
 
+    /**
+     * Name of the partial unique index from {@code V3__bookings_one_pending_per_user_event.sql}
+     * that {@link #persistHoldWithRetry} treats as "lost the (userId, eventId) PENDING-booking
+     * race, retry". Matched against {@link DataIntegrityViolationException#getMostSpecificCause()}'s
+     * message (the JDBC driver surfaces Postgres unique-violation messages as {@code duplicate key
+     * value violates unique constraint "uq_bookings_user_event_pending"}) so any *other* integrity
+     * violation is never mistaken for this race and fails fast instead.
+     */
+    private static final String PENDING_BOOKING_RACE_CONSTRAINT = "uq_bookings_user_event_pending";
+
     private final BookingRepository bookingRepository;
     private final SeatAvailabilityRepository seatAvailabilityRepository;
     private final SeatHoldLockService lockService;
@@ -97,11 +108,14 @@ public class BookingHoldService {
             }
             Booking booking = persistHoldWithRetry(request);
             return bookingMapper.toResponse(booking);
-        } catch (SeatUnavailableException ex) {
+        } catch (RuntimeException ex) {
             // Whole-request rollback per business-rules.md's concurrent seat-race path: release
             // every lock this request acquired, whether the loop above or persistHold below is what
-            // ultimately rejected it. Booking/BookingItem/SeatAvailability writes are already rolled
-            // back by TransactionTemplate on the RuntimeException before we get here.
+            // ultimately rejected it (including an exhausted-retry BookingContentionException or an
+            // unexpected DataIntegrityViolationException, not just SeatUnavailableException) —
+            // otherwise those Redis locks leak for the full hold TTL with no corresponding booking.
+            // Booking/BookingItem/SeatAvailability writes are already rolled back by
+            // TransactionTemplate on the RuntimeException before we get here.
             for (Long seatId : acquiredSeatIds) {
                 lockService.release(request.eventId(), seatId, holdToken);
             }
@@ -146,9 +160,17 @@ public class BookingHoldService {
         for (int attempt = 1; attempt <= MAX_PENDING_BOOKING_INSERT_ATTEMPTS; attempt++) {
             try {
                 return transactionTemplate.execute(status -> persistHold(request));
-            } catch (DataIntegrityViolationException raceLoss) {
+            } catch (DataIntegrityViolationException violation) {
+                if (!isPendingBookingRaceLoss(violation)) {
+                    // Some other integrity violation entirely (e.g. a future FK/not-null
+                    // regression) — not the race this loop exists for. Fail fast rather than
+                    // silently retrying/masking it as a race loss.
+                    throw violation;
+                }
                 if (attempt == MAX_PENDING_BOOKING_INSERT_ATTEMPTS) {
-                    throw raceLoss;
+                    throw new BookingContentionException(
+                            "Too much contention creating/appending to the pending booking for userId="
+                                    + request.userId() + ", eventId=" + request.eventId() + " — please retry");
                 }
                 log.info("Lost the (userId={}, eventId={}) PENDING-booking race on attempt {}, retrying "
                                 + "against the winner's now-committed booking",
@@ -157,6 +179,18 @@ public class BookingHoldService {
         }
         // Unreachable: the loop above always either returns or throws on its last attempt.
         throw new IllegalStateException("persistHoldWithRetry exhausted attempts without returning or throwing");
+    }
+
+    /**
+     * True only when {@code violation} is the {@code uq_bookings_user_event_pending} partial unique
+     * index violation — i.e. this request genuinely lost the (userId, eventId) PENDING-booking race
+     * — rather than some other integrity violation that happens to also be a
+     * {@link DataIntegrityViolationException}.
+     */
+    private boolean isPendingBookingRaceLoss(DataIntegrityViolationException violation) {
+        Throwable mostSpecificCause = violation.getMostSpecificCause();
+        String message = mostSpecificCause == null ? null : mostSpecificCause.getMessage();
+        return message != null && message.contains(PENDING_BOOKING_RACE_CONSTRAINT);
     }
 
     /**
