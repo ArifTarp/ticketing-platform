@@ -24,7 +24,11 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/auth/**", "/actuator/health/**").permitAll()
+                        .requestMatchers(
+                                "/api/v1/auth/**",
+                                "/actuator/health", "/actuator/health/**",
+                                "/actuator/info", "/actuator/info/**"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .httpBasic(httpBasic -> httpBasic.disable())

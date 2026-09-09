@@ -14,6 +14,12 @@ spring:
 # Demo/local-only JWT signing secret. NEVER use a hardcoded secret like this in production —
 # in a real deployment this would come from a secrets manager (Vault, AWS Secrets Manager, etc.)
 # and be rotated. Fine for this interview-showcase demo only.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
 auth:
   jwt:
     # Shared with the gateway (which verifies what this service signs) via the same env var and the
