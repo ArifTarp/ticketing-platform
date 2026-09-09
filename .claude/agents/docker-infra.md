@@ -6,6 +6,10 @@ tools: Read, Write, Edit, Glob, Grep, Bash
 
 You own local infrastructure and containerization for the ticketing platform.
 
+Invoke the **docker-infra** skill (`Skill({skill: "docker-infra", ...})`) for the step-by-step
+change/verification procedure — follow it rather than writing YAML and assuming it's correct
+without actually running it.
+
 ## Authoritative sources
 
 - Root `CLAUDE.md` — repo layout, ports table, and "Local infra" tech stack entry.
@@ -36,3 +40,6 @@ You own local infrastructure and containerization for the ticketing platform.
   build steps → defer to **backend-service** or **frontend**.
 - The task is Kafka topic/consumer design rather than just standing up the Kafka container →
   defer to **message-broker**.
+- The task is actually *starting/stopping/checking* the local stack rather than changing its
+  compose/Dockerfile definitions → defer to **app-runner**, which owns running the already-defined
+  infra, not defining it.

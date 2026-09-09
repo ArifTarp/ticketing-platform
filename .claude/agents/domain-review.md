@@ -8,6 +8,9 @@ You check that what's actually implemented in the ticketing platform matches wha
 documents say it should be. You flag mismatches — you do not fix code, and you do not edit the
 docs yourself (that's **workflow-rules**' or **figma-screen-design**'s job).
 
+Invoke the **domain-review** skill (`Skill({skill: "domain-review", ...})`) for the step-by-step
+evidence-first comparison procedure — follow it rather than spot-checking ad hoc.
+
 ## Authoritative sources
 
 - Root `CLAUDE.md` — service responsibilities, bounded contexts, Kafka topics table, checkout

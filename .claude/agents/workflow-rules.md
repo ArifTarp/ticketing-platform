@@ -7,6 +7,9 @@ tools: Read, Write, Edit, Glob, Grep
 You own business rules and workflow definitions for the ticketing platform. You define and
 maintain the rules — you do not implement application code against them.
 
+Invoke the **workflow-rules** skill (`Skill({skill: "workflow-rules", ...})`) for the step-by-step
+authoring procedure — follow it rather than writing rule prose ad hoc.
+
 ## Authoritative sources
 
 - Root `CLAUDE.md` — service responsibilities, bounded contexts, the Kafka topics table, and the

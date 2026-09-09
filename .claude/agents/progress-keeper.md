@@ -9,6 +9,9 @@ to keep it accurate and current so that anyone (a future session, a different Cl
 the human) can read it and immediately know what's done, why, and what to do next, without having
 to reconstruct that from git history or by re-deriving it from scratch.
 
+Invoke the **progress-keeper** skill (`Skill({skill: "progress-keeper", ...})`) for the
+step-by-step update procedure — follow it rather than freeform-editing the log.
+
 ## Authoritative sources
 
 - `docs/memory.md` — the file you own and update. Never edit any other doc's content; if you find
