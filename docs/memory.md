@@ -30,7 +30,10 @@ was followed.
 
 **All 14 phases in `docs/roadmap.md` (1 through 14) are complete and committed, and — since this
 session — the app has also had a full visual redesign plus its first real Playwright E2E suite.**
-Current HEAD is `44a88e8`. The full vertical slice (register/login → browse → hold seats → pay
+Current HEAD is `691b115` — the most recent commit is a Claude Code tooling audit/fix pass (agents/
+skills/hooks only, not application code; see "Current state" note further down and the "Claude Code
+tooling audit/fix pass" entry under "What's done"). The application's own most recent commit is
+still `44a88e8`. The full vertical slice (register/login → browse → hold seats → pay
 (mock) → confirmed booking + notification, with the saga and timeout path) plus the admin screens
 (venue/event CRUD, ADMIN-gated) all ship under a new "control panel" dark/monospace-data-face
 design system (commit `b0dea0d`), and the long-standing "Playwright: scaffold or defer?" open item
@@ -88,6 +91,19 @@ payload, first flagged during the Phase 8/9/12 review pass and left open since) 
 with the user's explicit approval, and `frontend/CLAUDE.md` (which had auto-imported it via
 `@AGENTS.md`) was rewritten with real frontend conventions content. This item is closed — see the
 "Gateway CORS + AGENTS.md removal" entry below.
+
+**Also this session (2026-09-09), later in the day, commit `691b115`: a Claude Code tooling
+audit/fix pass — not application code.** All 14 roadmap phases remain the current application
+status (unchanged by this entry); this pass only touched `.claude/agents/`, `.claude/skills/`,
+`.claude/settings.json`, and `.githooks/`. Highlights: a previously-committed agent file,
+`.claude/agents/saga-orchestrator.md`, was found silently missing from disk (tracked by git but
+absent from the working tree with no deletion commit) and restored; a new `run-ticketing-platform`
+skill now documents the actual working procedure for running the full stack locally, since
+`docker-compose` still can't do it alone (see "Next up"); several agents were wired to existing
+Superpowers skills they should have been using already; two new agents
+(`brainstorm-analyst`, `performance-engineer`) were added; and commit-time lint/typecheck/compile
+hooks were added both for Claude Code (`.claude/settings.json`) and for plain `git commit`
+(`.githooks/pre-commit`). Full detail in the "Claude Code tooling audit/fix pass" entry below.
 
 ## What's done
 
@@ -913,6 +929,95 @@ spec files, 8 specs total).
   future `docker-infra` pass — see "Next up".
 - Commits: `b0dea0d`, `44a88e8`.
 
+### Claude Code tooling audit/fix pass (2026-09-09)
+
+Committed as `691b115` "feat(claude-code): fill agent/skill/hook gaps for running and reviewing the
+app". **Not application code** — this pass only touched `.claude/agents/`, `.claude/skills/`,
+`.claude/settings.json`, and `.githooks/`. The user's ask had one governing rule: use an existing
+Superpowers skill wherever one fits, only build custom where none does. Scope was: audit which
+Superpowers skills the project's custom agents should be using, create whatever skills/agents were
+needed to actually run the app end to end, and recommend hooks.
+
+- **A real, notable bug in the tooling itself, worth flagging clearly**: `saga-orchestrator` was
+  referenced by name as a hand-off target in 5 other agent files (`backend-service`,
+  `code-reviewer`, `domain-review`, `message-broker`, `workflow-rules`), but
+  `.claude/agents/saga-orchestrator.md` itself was missing from disk. `git log --follow -- .claude/
+  agents/saga-orchestrator.md` showed it had actually been committed and edited twice before
+  (`95afcf7`, `dd3aa2b`, `26e6bee`) — it was silently deleted from the working tree at some point
+  **without a corresponding git commit recording the deletion**, so git still considered it
+  tracked-but-missing rather than showing it as deleted in `git status`. **This is a real
+  data-loss near-miss worth remembering**: a tracked file can vanish from disk without git status
+  ever flagging it until something touches that path again — `git log --follow` on the path is
+  what actually reveals it, a plain `ls`/`git status` will not. The fix restored the file,
+  preserving the original content's specific business-rule figures (10-min hold TTL, max 6 seats
+  per booking, `total` snapshotted at hold time) rather than discarding them, and extended it with
+  new content (an ADR-0005 claim-after-commit reference, plus the Superpowers-skill wiring below).
+- `.claude/skills/` didn't exist at all in this repo before this pass — zero project-level skills.
+  No agent except `code-reviewer` (already wrapped the Superpowers `code-review` skill) and
+  `figma-screen-design` (already wrapped the built-in `design` skill) named a Superpowers skill
+  anywhere, even where one obviously applied.
+- **Running the app locally had no automation and no single documented procedure anywhere in the
+  repo** — confirmed and not newly discovered here (this exact gap was already flagged in the
+  "UI redesign + first real Playwright E2E suite" entry above, "New gap discovered this session,
+  not fixed"). `docker-compose.yml` only stands up infra (Postgres/Kafka/Redis); the `build:`
+  blocks for booking/payment/notification reference Dockerfiles that don't exist on disk, and
+  gateway/auth/event/frontend have no compose entry at all — contradicting root `CLAUDE.md`'s
+  claim that compose covers "all services, frontend." **Still open, not fixed by this pass** — see
+  "Next up" — only worked around here by a new skill documenting the actually-working alternative
+  (manual per-service startup).
+- **New agent: `.claude/agents/brainstorm-analyst.md`** — wraps `superpowers:brainstorming` to
+  interpret a raw request (classify spike/bounded/architectural, explore repo context, produce the
+  right-sized output: a probe, an in-chat design, or a written spec) before any implementation
+  agent runs. Explicitly documents the one real limitation of running brainstorming as a subagent:
+  no `AskUserQuestion` tool and no ability to pause mid-run for a live answer, so it returns
+  explicit open questions for the invoking session to relay to the human instead of fabricating an
+  answer.
+- **New agent: `.claude/agents/performance-engineer.md`** — no Superpowers skill covers performance
+  work (checked the full available list), so this one is custom per the user's own fallback rule,
+  but it wraps `systematic-debugging` for regressions and `verification-before-completion` for
+  every performance claim (a measured before/after, never just a plausible-sounding fix reported as
+  done). Scoped to backend (N+1 queries, Redis seat-hold contention, Kafka lag, HikariCP,
+  Resilience4j tuning) and frontend (bundle size, the seat-map render-cost hotspot `ui-designer.md`
+  already flagged, Core Web Vitals).
+- **Small targeted edits tying existing agents to Superpowers skills they were missing**:
+  `backend-service.md`/`frontend.md` (test-driven-development for their existing "ships with
+  tests" rule, plus systematic-debugging); `gateway-resilience.md`/`message-broker.md`/
+  `ui-designer.md` (systematic-debugging for bug-fix work).
+- **`code-reviewer.md` restructured**: its checks were previously one flat list; now split into
+  explicit per-area standards (backend Java/Spring, frontend TypeScript/Next.js, Kafka/messaging,
+  SQL/Flyway) — pulled only from conventions already documented elsewhere in this repo, nothing
+  new invented.
+- **`docker-infra.md`**: now explicitly owns keeping the new `run-ticketing-platform` skill (below)
+  accurate whenever compose/Dockerfile/ports actually change.
+- **New skill: `.claude/skills/run-ticketing-platform/SKILL.md`** — the actual runbook for "how do
+  I run this app," since docker-compose can't do it alone yet. Documents: infra via `docker compose
+  up -d postgres kafka kafka-topics-init redis`, each Java service via `.\mvnw.cmd -pl <module>
+  spring-boot:run`, the gateway on port 8086 with the reasoning (this machine's permanent
+  port-8080 conflict, already known — see the "Environment" section below) and the adjustment for
+  an unaffected machine, frontend via `pnpm dev`, a health-check table for every port, how to check
+  status without restarting anything, and a stop procedure explicitly covering the
+  `TaskStop`-leaves-a-child-JVM-alive gotcha discovered during this session's own work (verify the
+  port is actually free after stopping each Java service; force-kill via
+  `Get-NetTCPConnection`/`Stop-Process` if not). **No new dedicated "run" agent was created** — a
+  subagent can't hold onto ~8 long-lived background processes across turns the way the main
+  session's own `TaskStop`/`Monitor` tooling can, so this is a skill invoked directly from the main
+  session, not an agent.
+- **Hooks added via the `update-config` skill, each proven to actually fire (not just written)
+  before committing**:
+  - `.claude/settings.json` (new file): `SessionStart` runs `docker compose ps` so infra state is
+    visible at the start of every session; `PostToolUse` on `Edit|Write` typechecks `frontend/`
+    (skipped when nothing under `frontend/` actually changed — verified both branches by hand);
+    `PreToolUse` gated on `Bash(git commit*)` lints+typechecks staged frontend changes and blocks
+    the commit on failure — proven with a real test commit (reverted afterward via `git reset
+    --soft HEAD~1` + `git restore`, left no trace).
+  - `.githooks/pre-commit` + `git config core.hooksPath .githooks` (repo-level, not
+    Claude-Code-specific): the same lint+typecheck gate, plus a scoped `mvnw compile` for whatever
+    backend module(s) have staged changes (compile only, not the full Testcontainers suite — too
+    slow to gate every commit on). Fires for a human's own `git commit` too, not just one Claude
+    Code runs. Deliberately plain POSIX `sh`, not Husky — this repo is mixed Java+TypeScript with
+    no root `package.json`.
+- Commit: `691b115`.
+
 ## Environment (this machine)
 
 Installed and verified working during Phase 2 — a fresh session should just re-verify, not
@@ -1006,7 +1111,25 @@ build since **no service has a `Dockerfile`** at all yet. If E2E is going to be 
 (rather than ad hoc, as this session did), a `docker-infra` pass adding Dockerfiles + compose
 entries for every service is the natural next step. Note: this session left the docker-compose
 infra containers (postgres/kafka/redis) running afterward — a future session can `docker compose
-down` them if not wanted, or reuse them directly.
+down` them if not wanted, or reuse them directly. **As of the Claude Code tooling pass (commit
+`691b115`), this gap is explicitly owned by the `docker-infra` agent going forward, and the new
+`.claude/skills/run-ticketing-platform/SKILL.md` documents the working manual-startup alternative
+in the meantime — that skill must be kept in sync if/when this gap is ever closed** (it says as
+much in its own file, but noting it here too).
+
+**From the Claude Code tooling audit/fix pass (commit `691b115`, not application code) — two
+follow-ups for a future session, neither urgent**:
+1. A tracked agent file (`saga-orchestrator.md`) was found silently missing from disk with no
+   deletion commit (see that entry above for the full mechanism) and has been restored. Worth a
+   quick sanity check in a future session to make sure this was an isolated incident, not a
+   pattern: run `git status` on the full repo, and if any other agent-referenced path
+   (`.claude/agents/*.md`) seems to be missing, check it with `git log --follow -- <path>` the same
+   way.
+2. This pass added lint/typecheck/compile git hooks (`.claude/settings.json` + `.githooks/
+   pre-commit`) — they were proven to fire correctly during the pass itself, but a future session
+   making its first real commit after this one should notice if either hook misfires (false
+   positive blocking a good commit, or silently not running at all) and fix it then, rather than
+   assuming the one-time proof-of-fire is permanent.
 
 **Also optional follow-up, not blocking, from Phase 14** (see that entry above for full detail):
 adding `GET /api/v1/venues` (listing) and `PUT`/`PATCH /api/v1/events/{id}` (editing) endpoints
