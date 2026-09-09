@@ -68,14 +68,14 @@ export function SeatCategoryList({
       )}
 
       {rows.map((row, index) => (
-        <div key={index} className="flex gap-2">
+        <div key={index} className="flex flex-wrap gap-2">
           <input
             type="text"
             placeholder="Name (e.g. VIP)"
             value={row.name}
             onChange={(e) => updateRow(index, { name: e.target.value })}
             disabled={isDisabled}
-            className="input-field flex-1 disabled:opacity-50"
+            className="input-field min-w-0 flex-1 basis-32 disabled:opacity-50"
           />
           <input
             type="text"
@@ -83,7 +83,7 @@ export function SeatCategoryList({
             value={row.section}
             onChange={(e) => updateRow(index, { section: e.target.value })}
             disabled={isDisabled}
-            className="input-field w-28 disabled:opacity-50"
+            className="input-field min-w-0 flex-1 basis-20 disabled:opacity-50"
           />
           <input
             type="number"
@@ -93,13 +93,13 @@ export function SeatCategoryList({
             value={row.price}
             onChange={(e) => updateRow(index, { price: e.target.value })}
             disabled={isDisabled}
-            className="input-field value-mono w-28 disabled:opacity-50"
+            className="input-field value-mono min-w-0 flex-1 basis-20 disabled:opacity-50"
           />
           <button
             type="button"
             onClick={() => removeRow(index)}
             disabled={isDisabled || rows.length <= 1}
-            className="btn btn-secondary disabled:cursor-not-allowed"
+            className="btn btn-secondary shrink-0 disabled:cursor-not-allowed"
           >
             Remove
           </button>
