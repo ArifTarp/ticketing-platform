@@ -9,6 +9,7 @@ import { useAuth } from "@/context/SessionProvider";
 import { useBookingPolling } from "@/hooks/useBookingPolling";
 import type { BookingResponse } from "@/types/booking";
 import { EmptyState } from "@/components/common/EmptyState";
+import { FormError } from "@/components/common/FormError";
 import { BookingSummary } from "@/components/checkout/BookingSummary";
 import { PaymentForm } from "@/components/checkout/PaymentForm";
 import { PaymentProcessingOverlay } from "@/components/checkout/PaymentProcessingOverlay";
@@ -114,8 +115,8 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
   if (isLoading) {
     return (
       <div className="flex flex-col gap-6">
-        <div className="h-10 w-64 animate-pulse rounded-md bg-zinc-200" />
-        <div className="h-64 animate-pulse rounded-lg bg-zinc-200" />
+        <div className="h-10 w-64 animate-pulse rounded-[var(--radius-sm)] bg-[var(--surface)]" />
+        <div className="h-64 animate-pulse rounded-[var(--radius-md)] bg-[var(--surface)]" />
       </div>
     );
   }
@@ -131,7 +132,14 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-zinc-900">Checkout</h1>
+      <div className="flex items-center gap-3">
+        <span className="value-mono flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] text-xs text-[var(--accent)]">
+          1
+        </span>
+        <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold text-[var(--text-primary)]">
+          Checkout
+        </h1>
+      </div>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_1fr]">
         {isSubmitted ? (
           <PaymentProcessingOverlay />
@@ -140,21 +148,11 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
         )}
         <BookingSummary booking={polling.booking ?? booking} />
       </div>
-      {payError && (
-        <p className="text-sm text-red-700" role="alert">
-          {payError}
-        </p>
-      )}
+      {payError && <FormError message={payError} />}
       {polling.hasTimedOut && (
-        <p className="text-sm text-red-700" role="alert">
-          This is taking longer than expected. Refresh the page to check the latest status.
-        </p>
+        <FormError message="This is taking longer than expected. Refresh the page to check the latest status." />
       )}
-      {polling.error && (
-        <p className="text-sm text-red-700" role="alert">
-          {polling.error}
-        </p>
-      )}
+      {polling.error && <FormError message={polling.error} />}
     </div>
   );
 }

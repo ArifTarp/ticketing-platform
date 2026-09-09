@@ -58,16 +58,16 @@ export function SeatMap({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="rounded-md bg-zinc-800 py-2 text-center text-xs font-medium tracking-widest text-white">
-        STAGE
+      <div className="label-mono rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-[var(--surface-sunken)] py-2 text-center">
+        Stage
       </div>
       {sections.map((section) => (
         <div key={section.section} className="flex flex-col gap-2">
-          <p className="text-sm font-medium text-zinc-700">Section {section.section}</p>
+          <p className="label-mono">Section {section.section}</p>
           <div className="flex flex-col gap-1.5">
             {section.rows.map((row) => (
               <div key={row.row} className="flex items-center gap-2">
-                <span className="w-6 text-xs text-zinc-400">{row.row}</span>
+                <span className="value-mono w-6 text-xs text-[var(--text-muted)]">{row.row}</span>
                 <div className="flex flex-wrap gap-1.5">
                   {row.seats.map((seat) => (
                     <Seat

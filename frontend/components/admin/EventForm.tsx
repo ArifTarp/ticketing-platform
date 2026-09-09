@@ -144,39 +144,46 @@ export function EventForm({ mode, eventId, venues, onVenueCreated, onClose, onSu
   const isFieldsDisabled = isSubmitting || isLoadingDetail || mode === "edit";
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
-        <h2 className="mb-4 text-lg font-semibold text-zinc-900">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
+      <div className="panel max-h-[90vh] w-full max-w-lg overflow-y-auto p-6">
+        <h2 className="mb-4 font-[family-name:var(--font-display)] text-lg font-semibold text-[var(--text-primary)]">
           {mode === "create" ? "Create event" : "Edit event"}
         </h2>
 
         {isLoadingDetail ? (
           <div className="flex flex-col gap-3">
-            <div className="h-4 w-2/3 animate-pulse rounded bg-zinc-200" />
-            <div className="h-24 animate-pulse rounded bg-zinc-200" />
+            <div className="h-4 w-2/3 animate-pulse rounded-[var(--radius-sm)] bg-[var(--surface-hover)]" />
+            <div className="h-24 animate-pulse rounded-[var(--radius-sm)] bg-[var(--surface-hover)]" />
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {mode === "edit" && (
-              <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              <p
+                className="rounded-[var(--radius-sm)] border px-3 py-2 text-sm"
+                style={{
+                  borderColor: "var(--status-pending)",
+                  backgroundColor: "var(--status-pending-soft)",
+                  color: "var(--status-pending)",
+                }}
+              >
                 Editing an existing event&apos;s details isn&apos;t supported yet — the event
                 service has no update endpoint. You can still add new seat categories below.
               </p>
             )}
 
-            <label className="flex flex-col gap-1 text-sm">
-              Title
+            <label className="flex flex-col gap-1 text-sm text-[var(--text-secondary)]">
+              <span className="label-mono">Title</span>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 disabled={isFieldsDisabled}
-                className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none disabled:bg-zinc-100"
+                className="input-field disabled:opacity-50"
               />
             </label>
 
-            <label className="flex flex-col gap-1 text-sm">
-              Venue
+            <label className="flex flex-col gap-1 text-sm text-[var(--text-secondary)]">
+              <span className="label-mono">Venue</span>
               <VenueSelect
                 venues={venues}
                 selectedVenueId={selectedVenueId}
@@ -186,35 +193,35 @@ export function EventForm({ mode, eventId, venues, onVenueCreated, onClose, onSu
               />
             </label>
 
-            <label className="flex flex-col gap-1 text-sm">
-              Description
+            <label className="flex flex-col gap-1 text-sm text-[var(--text-secondary)]">
+              <span className="label-mono">Description</span>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 disabled={isFieldsDisabled}
                 rows={3}
-                className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none disabled:bg-zinc-100"
+                className="input-field disabled:opacity-50"
               />
             </label>
 
-            <label className="flex flex-col gap-1 text-sm">
-              Starts at
+            <label className="flex flex-col gap-1 text-sm text-[var(--text-secondary)]">
+              <span className="label-mono">Starts at</span>
               <input
                 type="datetime-local"
                 value={startsAt}
                 onChange={(e) => setStartsAt(e.target.value)}
                 disabled={isFieldsDisabled}
-                className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none disabled:bg-zinc-100"
+                className="input-field value-mono disabled:opacity-50"
               />
             </label>
 
-            <label className="flex flex-col gap-1 text-sm">
-              Status
+            <label className="flex flex-col gap-1 text-sm text-[var(--text-secondary)]">
+              <span className="label-mono">Status</span>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as EventStatus)}
                 disabled={isFieldsDisabled}
-                className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none disabled:bg-zinc-100"
+                className="input-field disabled:opacity-50"
               >
                 {STATUS_OPTIONS.map((option) => (
                   <option key={option} value={option}>
@@ -234,19 +241,10 @@ export function EventForm({ mode, eventId, venues, onVenueCreated, onClose, onSu
             <FormError message={error} />
 
             <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isSubmitting}
-                className="rounded-md border border-zinc-300 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100"
-              >
+              <button type="button" onClick={onClose} disabled={isSubmitting} className="btn btn-secondary">
                 Cancel
               </button>
-              <button
-                type="submit"
-                disabled={isSaveDisabled}
-                className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
-              >
+              <button type="submit" disabled={isSaveDisabled} className="btn btn-primary">
                 {isSubmitting ? "Saving…" : "Save event"}
               </button>
             </div>

@@ -38,11 +38,11 @@ export function SelectSeatsButton({ event }: SelectSeatsButtonProps) {
         type="button"
         disabled={!event.bookable}
         onClick={() => router.push(`/events/${event.id}/seats`)}
-        className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
+        className="btn btn-primary w-full"
       >
         Select seats
       </button>
-      {reason && <p className="text-xs text-zinc-500">{reason}</p>}
+      {reason && <p className="label-mono">{reason}</p>}
     </div>
   );
 }

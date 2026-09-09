@@ -18,7 +18,7 @@ const TABS: { id: AdminTab; label: string }[] = [
  */
 export function AdminTabs({ activeTab, onTabChange }: AdminTabsProps) {
   return (
-    <div className="flex gap-1 border-b border-zinc-200" role="tablist">
+    <div className="flex gap-1 border-b border-[var(--border)]" role="tablist">
       {TABS.map((tab) => (
         <button
           key={tab.id}
@@ -26,10 +26,10 @@ export function AdminTabs({ activeTab, onTabChange }: AdminTabsProps) {
           role="tab"
           aria-selected={activeTab === tab.id}
           onClick={() => onTabChange(tab.id)}
-          className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
+          className={`label-mono -mb-px border-b-2 px-4 py-2.5 transition-colors ${
             activeTab === tab.id
-              ? "border-zinc-900 text-zinc-900"
-              : "border-transparent text-zinc-500 hover:text-zinc-700"
+              ? "border-[var(--accent)] text-[var(--text-primary)]"
+              : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
           }`}
         >
           {tab.label}

@@ -59,7 +59,7 @@ export default function ConfirmPage({ params }: ConfirmPageProps) {
   }
 
   if (isLoading) {
-    return <div className="h-64 animate-pulse rounded-lg bg-zinc-200" />;
+    return <div className="h-64 animate-pulse rounded-[var(--radius-md)] bg-[var(--surface)]" />;
   }
 
   if (loadError || !booking) {

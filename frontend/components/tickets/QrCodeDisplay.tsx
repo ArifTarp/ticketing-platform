@@ -28,7 +28,7 @@ export function QrCodeDisplay({ value, size = 128 }: QrCodeDisplayProps) {
   if (error) {
     return (
       <div
-        className="flex items-center justify-center rounded-md border border-dashed border-zinc-300 text-xs text-zinc-500"
+        className="label-mono flex items-center justify-center rounded-[var(--radius-sm)] border border-dashed border-[var(--border-strong)] text-center"
         style={{ width: size, height: size }}
       >
         QR unavailable
@@ -36,5 +36,11 @@ export function QrCodeDisplay({ value, size = 128 }: QrCodeDisplayProps) {
     );
   }
 
-  return <canvas ref={canvasRef} width={size} height={size} aria-label={`QR code for booking ${value}`} />;
+  return (
+    <div
+      className="flex items-center justify-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-sunken)] p-2"
+    >
+      <canvas ref={canvasRef} width={size} height={size} aria-label={`QR code for booking ${value}`} />
+    </div>
+  );
 }

@@ -11,11 +11,17 @@ interface SeatProps {
   isLocked?: boolean;
 }
 
+// Schematic seat-node states — kept as static Tailwind classes (no per-seat inline styles/shadows)
+// so the seat map stays cheap to render even with many seats on screen at once.
 const STATUS_CLASSES: Record<SeatVisualStatus, string> = {
-  AVAILABLE: "border-zinc-300 bg-white text-zinc-700 hover:border-zinc-900 cursor-pointer",
-  SELECTED: "border-zinc-900 bg-zinc-900 text-white cursor-pointer",
-  HELD: "border-zinc-200 bg-zinc-200 text-zinc-400 cursor-not-allowed",
-  SOLD: "border-zinc-800 bg-zinc-800 text-zinc-400 cursor-not-allowed",
+  AVAILABLE:
+    "border-[var(--border-strong)] bg-transparent text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)] cursor-pointer",
+  SELECTED:
+    "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)] shadow-[0_0_0_3px_var(--accent-soft)] cursor-pointer",
+  HELD:
+    "border-[var(--status-pending)] bg-[var(--status-pending-soft)] text-[var(--status-pending)] cursor-not-allowed opacity-90",
+  SOLD:
+    "border-[var(--status-danger)]/60 bg-[var(--status-danger-soft)] text-[var(--text-muted)] cursor-not-allowed opacity-60",
 };
 
 /** Single seat square; visual variant is a pure function of its merged SeatAvailability status. */
@@ -29,7 +35,7 @@ export function Seat({ seat, status, onClick, isLocked = false }: SeatProps) {
       onClick={() => onClick(seat)}
       title={`${seat.section} ${seat.row}${seat.number} — ${seat.seatCategory.name}`}
       aria-pressed={status === "SELECTED"}
-      className={`flex h-8 w-8 items-center justify-center rounded-md border text-[10px] font-medium transition-colors ${STATUS_CLASSES[status]}`}
+      className={`value-mono flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] border text-[10px] font-medium transition-colors ${STATUS_CLASSES[status]}`}
     >
       {seat.number}
     </button>

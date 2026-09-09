@@ -43,10 +43,15 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold text-zinc-900">Log in</h1>
+      <div>
+        <h1 className="font-[family-name:var(--font-display)] text-lg font-semibold text-[var(--text-primary)]">
+          Log in
+        </h1>
+        <p className="label-mono mt-1">Access panel</p>
+      </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="login-email" className="text-sm font-medium text-zinc-700">
+        <label htmlFor="login-email" className="label-mono">
           Email
         </label>
         <input
@@ -56,12 +61,12 @@ export function LoginForm() {
           onChange={(event) => setEmail(event.target.value)}
           disabled={isSubmitting}
           autoComplete="email"
-          className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none disabled:bg-zinc-100"
+          className="input-field w-full disabled:opacity-50"
         />
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="login-password" className="text-sm font-medium text-zinc-700">
+        <label htmlFor="login-password" className="label-mono">
           Password
         </label>
         <PasswordInput
@@ -75,17 +80,13 @@ export function LoginForm() {
 
       <FormError message={error} />
 
-      <button
-        type="submit"
-        disabled={isSubmitDisabled}
-        className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
-      >
+      <button type="submit" disabled={isSubmitDisabled} className="btn btn-primary w-full">
         {isSubmitting ? "Logging in…" : "Log in"}
       </button>
 
-      <p className="text-center text-sm text-zinc-500">
+      <p className="text-center text-sm text-[var(--text-muted)]">
         Don&apos;t have an account?{" "}
-        <Link href="/register" className="font-medium text-zinc-900 hover:underline">
+        <Link href="/register" className="font-medium text-[var(--accent)] hover:text-[var(--accent-strong)]">
           Register instead
         </Link>
       </p>

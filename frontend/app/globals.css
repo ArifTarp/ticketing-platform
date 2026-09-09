@@ -1,26 +1,211 @@
 @import "tailwindcss";
 
+/*
+ * Design system: "control panel" — a dark, precise, technical aesthetic (dashboards/telemetry,
+ * not concert/cinema, not literal space). Single electric-cyan accent, hairline borders, small
+ * radii, monospace for data (prices, ids, countdowns, statuses). See .claude/agents/ui-designer.md
+ * for the full rationale — this file is the single source of truth for the tokens it describes.
+ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #0a0c10;
+  --bg-elevated: #0d1016;
+  --surface: #12151b;
+  --surface-hover: #191e27;
+  --surface-sunken: #0d1016;
+
+  --border: #232833;
+  --border-strong: #313846;
+
+  --text-primary: #e7eaee;
+  --text-secondary: #9aa4b2;
+  --text-muted: #5c6472;
+
+  --accent: #22d3ee;
+  --accent-strong: #67e8f9;
+  --accent-contrast: #04161a;
+  --accent-soft: rgba(34, 211, 238, 0.12);
+  --accent-border: rgba(34, 211, 238, 0.35);
+
+  --status-live: #34d399;
+  --status-live-soft: rgba(52, 211, 153, 0.14);
+  --status-pending: #fbbf24;
+  --status-pending-soft: rgba(251, 191, 36, 0.14);
+  --status-danger: #f87171;
+  --status-danger-soft: rgba(248, 113, 113, 0.14);
+  --status-neutral: #9aa4b2;
+  --status-neutral-soft: rgba(154, 164, 178, 0.14);
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-status-live: var(--status-live);
+  --color-status-pending: var(--status-pending);
+  --color-status-danger: var(--status-danger);
+  --color-status-neutral: var(--status-neutral);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-data);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Faint schematic grid — decorative background texture, used sparingly (hero/empty sections). */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+@layer components {
+  /* Card / container surface used everywhere a bordered block is needed. */
+  .panel {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+
+  .panel-interactive {
+    transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+  }
+
+  .panel-interactive:hover {
+    border-color: var(--accent-border);
+    background-color: var(--surface-hover);
+    box-shadow: 0 0 0 1px var(--accent-soft), 0 12px 28px -12px rgba(34, 211, 238, 0.25);
+  }
+
+  /* Small uppercase tracked label used for metadata/section headers ("VENUE", "STATUS", ...). */
+  .label-mono {
+    font-family: var(--font-data), ui-monospace, SFMono-Regular, monospace;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+  }
+
+  /* Numeric/id/data value styling (prices, seat codes, ticket ids, countdowns). */
+  .value-mono {
+    font-family: var(--font-data), ui-monospace, SFMono-Regular, monospace;
+    letter-spacing: -0.01em;
+  }
+
+  .status-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    flex-shrink: 0;
+  }
+
+  .status-dot-pulse {
+    animation: status-pulse 2s ease-in-out infinite;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease, opacity 150ms ease;
+    white-space: nowrap;
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background-color: var(--accent);
+    color: var(--accent-contrast);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--accent-strong);
+  }
+
+  .btn-secondary {
+    background-color: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    border-color: var(--accent-border);
+    background-color: var(--surface-hover);
+  }
+
+  .btn-ghost {
+    background-color: transparent;
+    color: var(--text-secondary);
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    color: var(--text-primary);
+    background-color: var(--surface-hover);
+  }
+
+  .input-field {
+    background-color: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  .input-field:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  .input-field::placeholder {
+    color: var(--text-muted);
+  }
+}
+
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }

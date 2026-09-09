@@ -8,39 +8,45 @@ export function NavBar() {
   const isAdmin = Boolean(user?.roles.includes("ADMIN"));
 
   return (
-    <header className="border-b border-zinc-200 bg-white">
+    <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur-sm">
       <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <Link href="/events" className="text-lg font-semibold text-zinc-900">
+        <Link
+          href="/events"
+          className="flex items-center gap-2 font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight text-[var(--text-primary)]"
+        >
+          <span className="inline-block h-2 w-2 rounded-full bg-[var(--accent)] shadow-[0_0_10px_var(--accent)]" />
           Ticketing
         </Link>
-        <div className="flex items-center gap-4 text-sm">
-          <Link href="/events" className="text-zinc-600 hover:text-zinc-900">
+        <div className="flex items-center gap-5 text-sm">
+          <Link
+            href="/events"
+            className="text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+          >
             Events
           </Link>
           {isAuthenticated ? (
             <>
-              <Link href="/tickets" className="text-zinc-600 hover:text-zinc-900">
+              <Link
+                href="/tickets"
+                className="text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+              >
                 My tickets
               </Link>
               {isAdmin && (
-                <Link href="/admin/events" className="text-zinc-600 hover:text-zinc-900">
+                <Link
+                  href="/admin/events"
+                  className="text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+                >
                   Admin
                 </Link>
               )}
-              <span className="text-zinc-500">{user?.email}</span>
-              <button
-                type="button"
-                onClick={logout}
-                className="rounded-md border border-zinc-300 px-3 py-1.5 text-zinc-700 hover:bg-zinc-100"
-              >
+              <span className="label-mono hidden sm:inline">{user?.email}</span>
+              <button type="button" onClick={logout} className="btn btn-secondary">
                 Log out
               </button>
             </>
           ) : (
-            <Link
-              href="/login"
-              className="rounded-md bg-zinc-900 px-3 py-1.5 text-white hover:bg-zinc-700"
-            >
+            <Link href="/login" className="btn btn-primary">
               Log in
             </Link>
           )}

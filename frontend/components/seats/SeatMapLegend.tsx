@@ -1,17 +1,17 @@
-const LEGEND_ITEMS: { label: string; className: string }[] = [
-  { label: "Available", className: "border-zinc-300 bg-white" },
-  { label: "Selected", className: "border-zinc-900 bg-zinc-900" },
-  { label: "Held", className: "border-zinc-200 bg-zinc-200" },
-  { label: "Sold", className: "border-zinc-800 bg-zinc-800" },
+const LEGEND_ITEMS: { label: string; color: string }[] = [
+  { label: "Available", color: "var(--border-strong)" },
+  { label: "Selected", color: "var(--accent)" },
+  { label: "Held", color: "var(--status-pending)" },
+  { label: "Sold", color: "var(--status-danger)" },
 ];
 
 /** Static legend for the four seat visual states — screen 4's SeatMapLegend. */
 export function SeatMapLegend() {
   return (
-    <ul className="flex flex-wrap gap-4 text-xs text-zinc-600">
+    <ul className="flex flex-wrap gap-4">
       {LEGEND_ITEMS.map((item) => (
-        <li key={item.label} className="flex items-center gap-2">
-          <span className={`h-4 w-4 rounded border ${item.className}`} />
+        <li key={item.label} className="label-mono flex items-center gap-2">
+          <span className="status-dot" style={{ backgroundColor: item.color }} aria-hidden />
           {item.label}
         </li>
       ))}

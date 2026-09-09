@@ -33,24 +33,36 @@ export function AdminGuard({ children }: AdminGuardProps) {
     }
   }, [status, router]);
 
-  if (status === "loading" || status === "unauthenticated") {
+  if (status === "loading") {
+    return (
+      <div className="flex flex-col gap-3 p-6">
+        <span className="label-mono">Verifying access</span>
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="h-10 animate-pulse rounded-[var(--radius-sm)] bg-[var(--surface-hover)]" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "unauthenticated") {
     return null;
   }
 
   if (status === "forbidden") {
     return (
-      <EmptyState
-        title="You don't have access to this page"
-        description="Admin permissions are required to manage events and venues."
-        action={
-          <Link
-            href="/events"
-            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
-          >
-            Back to events
-          </Link>
-        }
-      />
+      <div className="p-6">
+        <EmptyState
+          title="You don't have access to this page"
+          description="Admin permissions are required to manage events and venues."
+          action={
+            <Link href="/events" className="btn btn-primary">
+              Back to events
+            </Link>
+          }
+        />
+      </div>
     );
   }
 

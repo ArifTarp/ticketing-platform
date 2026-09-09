@@ -13,19 +13,24 @@ export function HoldExpiredModal({ isOpen, onDismiss }: HoldExpiredModalProps) {
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
     >
-      <div className="flex w-full max-w-sm flex-col gap-4 rounded-lg bg-white p-6 shadow-lg">
-        <h2 className="text-base font-semibold text-zinc-900">Your hold expired</h2>
-        <p className="text-sm text-zinc-600">
+      <div className="panel flex w-full max-w-sm flex-col gap-4 p-6">
+        <div className="flex items-center gap-2">
+          <span
+            className="status-dot"
+            style={{ backgroundColor: "var(--status-danger)" }}
+            aria-hidden
+          />
+          <h2 className="font-[family-name:var(--font-display)] text-base font-semibold text-[var(--text-primary)]">
+            Your hold expired
+          </h2>
+        </div>
+        <p className="text-sm text-[var(--text-secondary)]">
           You didn&apos;t complete checkout within the 10-minute hold window, so your selected
           seats were released. Pick your seats again to continue.
         </p>
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
-        >
+        <button type="button" onClick={onDismiss} className="btn btn-primary w-full">
           Select seats again
         </button>
       </div>

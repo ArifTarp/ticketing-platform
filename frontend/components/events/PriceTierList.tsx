@@ -8,7 +8,7 @@ interface PriceTierListProps {
 /** One row per SeatCategory (name + price) — screen 3's price list. */
 export function PriceTierList({ seatCategories }: PriceTierListProps) {
   if (seatCategories.length === 0) {
-    return <p className="text-sm text-zinc-500">Pricing not announced yet.</p>;
+    return <p className="text-sm text-[var(--text-secondary)]">Pricing not announced yet.</p>;
   }
 
   return (
@@ -16,10 +16,10 @@ export function PriceTierList({ seatCategories }: PriceTierListProps) {
       {seatCategories.map((tier) => (
         <li
           key={tier.id}
-          className="flex items-center justify-between rounded-md border border-zinc-200 px-3 py-2 text-sm"
+          className="flex items-center justify-between rounded-[var(--radius-sm)] border border-[var(--border)] px-3 py-2 text-sm"
         >
-          <span className="font-medium text-zinc-700">{tier.name}</span>
-          <span className="text-zinc-900">{formatPrice(tier.price)}</span>
+          <span className="label-mono">{tier.name}</span>
+          <span className="value-mono text-[var(--text-primary)]">{formatPrice(tier.price)}</span>
         </li>
       ))}
     </ul>

@@ -47,9 +47,9 @@ export function EventTable({ reloadToken, onEdit }: EventTableProps) {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col gap-2">
+      <div className="panel flex flex-col gap-2 p-3">
         {Array.from({ length: SKELETON_ROW_COUNT }).map((_, index) => (
-          <div key={index} className="h-12 animate-pulse rounded-md bg-zinc-100" />
+          <div key={index} className="h-10 animate-pulse rounded-[var(--radius-sm)] bg-[var(--surface-hover)]" />
         ))}
       </div>
     );
@@ -61,11 +61,7 @@ export function EventTable({ reloadToken, onEdit }: EventTableProps) {
         title="Couldn't load events"
         description={error}
         action={
-          <button
-            type="button"
-            onClick={() => setRetryToken((prev) => prev + 1)}
-            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
-          >
+          <button type="button" onClick={() => setRetryToken((prev) => prev + 1)} className="btn btn-primary">
             Retry
           </button>
         }
@@ -78,25 +74,27 @@ export function EventTable({ reloadToken, onEdit }: EventTableProps) {
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
+    <div className="panel overflow-hidden">
       <table className="w-full text-left text-sm">
-        <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
+        <thead className="border-b border-[var(--border)]">
           <tr>
-            <th className="px-4 py-3 font-medium">Title</th>
-            <th className="px-4 py-3 font-medium">Venue</th>
-            <th className="px-4 py-3 font-medium">Starts at</th>
-            <th className="px-4 py-3 font-medium">Status</th>
-            <th className="px-4 py-3 font-medium">
+            <th className="label-mono px-4 py-3 font-medium">Title</th>
+            <th className="label-mono px-4 py-3 font-medium">Venue</th>
+            <th className="label-mono px-4 py-3 font-medium">Starts at</th>
+            <th className="label-mono px-4 py-3 font-medium">Status</th>
+            <th className="label-mono px-4 py-3 font-medium">
               <span className="sr-only">Actions</span>
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-zinc-100">
+        <tbody className="divide-y divide-[var(--border)]">
           {events.map((event) => (
-            <tr key={event.id}>
-              <td className="px-4 py-3 font-medium text-zinc-900">{event.title}</td>
-              <td className="px-4 py-3 text-zinc-600">{event.venueName}</td>
-              <td className="px-4 py-3 text-zinc-600">{formatEventDate(event.startsAt)}</td>
+            <tr key={event.id} className="transition-colors hover:bg-[var(--surface-hover)]">
+              <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{event.title}</td>
+              <td className="px-4 py-3 text-[var(--text-secondary)]">{event.venueName}</td>
+              <td className="value-mono px-4 py-3 text-[var(--text-secondary)]">
+                {formatEventDate(event.startsAt)}
+              </td>
               <td className="px-4 py-3">
                 <EventStatusBadge status={event.status} />
               </td>
@@ -104,7 +102,7 @@ export function EventTable({ reloadToken, onEdit }: EventTableProps) {
                 <button
                   type="button"
                   onClick={() => onEdit(event)}
-                  className="text-sm font-medium text-zinc-600 hover:text-zinc-900"
+                  className="label-mono text-[var(--text-secondary)] hover:text-[var(--accent)]"
                 >
                   Edit
                 </button>

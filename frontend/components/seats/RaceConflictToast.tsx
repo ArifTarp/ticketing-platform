@@ -12,14 +12,22 @@ export function RaceConflictToast({ message, onDismiss }: RaceConflictToastProps
   return (
     <div
       role="alert"
-      className="flex items-start justify-between gap-3 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-sm"
+      className="flex items-start justify-between gap-3 rounded-[var(--radius-sm)] border px-4 py-3 text-sm"
+      style={{
+        borderColor: "var(--status-danger)",
+        backgroundColor: "var(--status-danger-soft)",
+        color: "var(--status-danger)",
+      }}
     >
-      <span>{message}</span>
+      <span className="flex items-start gap-2">
+        <span className="status-dot mt-1.5" style={{ backgroundColor: "var(--status-danger)" }} aria-hidden />
+        {message}
+      </span>
       <button
         type="button"
         onClick={onDismiss}
         aria-label="Dismiss"
-        className="text-red-500 hover:text-red-700"
+        className="text-[var(--status-danger)] opacity-80 hover:opacity-100"
       >
         ×
       </button>

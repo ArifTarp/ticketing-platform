@@ -1,13 +1,13 @@
 /** Shown while `useBookingPolling` waits for the async checkout saga's result (screen 5). */
 export function PaymentProcessingOverlay() {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-zinc-200 bg-white px-6 py-16 text-center">
+    <div className="bg-grid panel flex flex-col items-center justify-center gap-4 px-6 py-16 text-center">
       <div
         aria-hidden="true"
-        className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900"
+        className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--border-strong)] border-t-[var(--accent)]"
       />
-      <p className="text-sm font-medium text-zinc-700">Confirming your payment…</p>
-      <p className="text-xs text-zinc-500">This can take a few seconds.</p>
+      <p className="label-mono text-[var(--text-primary)]">Confirming your payment…</p>
+      <p className="text-xs text-[var(--text-muted)]">This can take a few seconds.</p>
     </div>
   );
 }

@@ -24,7 +24,9 @@ export default function TicketsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold text-zinc-900">My tickets</h1>
+      <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold text-[var(--text-primary)]">
+        My tickets
+      </h1>
       <TicketList />
     </div>
   );

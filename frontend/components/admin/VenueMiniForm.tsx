@@ -46,50 +46,41 @@ export function VenueMiniForm({ onCreated, onCancel }: VenueMiniFormProps) {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
       <FormError message={error} />
-      <label className="flex flex-col gap-1 text-sm">
-        Venue name
+      <label className="flex flex-col gap-1 text-sm text-[var(--text-secondary)]">
+        <span className="label-mono">Venue name</span>
         <input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
           disabled={isSubmitting}
-          className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none disabled:bg-zinc-100"
+          className="input-field disabled:opacity-50"
         />
       </label>
-      <label className="flex flex-col gap-1 text-sm">
-        Address
+      <label className="flex flex-col gap-1 text-sm text-[var(--text-secondary)]">
+        <span className="label-mono">Address</span>
         <input
           type="text"
           value={address}
           onChange={(e) => setAddress(e.target.value)}
           disabled={isSubmitting}
-          className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none disabled:bg-zinc-100"
+          className="input-field disabled:opacity-50"
         />
       </label>
-      <label className="flex flex-col gap-1 text-sm">
-        City
+      <label className="flex flex-col gap-1 text-sm text-[var(--text-secondary)]">
+        <span className="label-mono">City</span>
         <input
           type="text"
           value={city}
           onChange={(e) => setCity(e.target.value)}
           disabled={isSubmitting}
-          className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none disabled:bg-zinc-100"
+          className="input-field disabled:opacity-50"
         />
       </label>
       <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
-        >
+        <button type="submit" disabled={isSubmitting} className="btn btn-primary">
           {isSubmitting ? "Creating venue…" : "Create venue"}
         </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={isSubmitting}
-          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100"
-        >
+        <button type="button" onClick={onCancel} disabled={isSubmitting} className="btn btn-secondary">
           Cancel
         </button>
       </div>

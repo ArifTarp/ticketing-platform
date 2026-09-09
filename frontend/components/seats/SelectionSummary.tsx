@@ -28,29 +28,35 @@ export function SelectionSummary({
   onProceedToPayment,
 }: SelectionSummaryProps) {
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-4">
-      <h2 className="text-sm font-semibold text-zinc-900">Your selection</h2>
+    <div className="panel sticky top-4 flex h-fit flex-col gap-4 p-4">
+      <h2 className="font-[family-name:var(--font-display)] text-sm font-semibold text-[var(--text-primary)]">
+        Your selection
+      </h2>
       {selectedSeats.length === 0 ? (
-        <p className="text-sm text-zinc-500">Click a seat to select it (up to 6).</p>
+        <p className="text-sm text-[var(--text-secondary)]">Click a seat to select it (up to 6).</p>
       ) : (
         <ul className="flex flex-col gap-1.5 text-sm">
           {selectedSeats.map((seat) => (
             <li key={seat.seatId} className="flex items-center justify-between">
-              <span className="text-zinc-700">
+              <span className="value-mono text-[var(--text-secondary)]">
                 {seat.section} {seat.row}
                 {seat.number}
               </span>
-              <span className="text-zinc-900">{formatPrice(seat.seatCategory.price)}</span>
+              <span className="value-mono text-[var(--text-primary)]">
+                {formatPrice(seat.seatCategory.price)}
+              </span>
             </li>
           ))}
         </ul>
       )}
       {maxSeatsReached && (
-        <p className="text-xs text-amber-600">Max 6 seats per booking.</p>
+        <p className="label-mono" style={{ color: "var(--status-pending)" }}>
+          Max 6 seats per booking.
+        </p>
       )}
-      <div className="flex items-center justify-between border-t border-zinc-200 pt-3 text-sm font-semibold">
+      <div className="flex items-center justify-between border-t border-[var(--border)] pt-3 text-sm font-semibold text-[var(--text-primary)]">
         <span>Total</span>
-        <span>{formatPrice(total)}</span>
+        <span className="value-mono">{formatPrice(total)}</span>
       </div>
       <FormError message={holdError} />
       {isHeld ? (
@@ -58,7 +64,7 @@ export function SelectionSummary({
           type="button"
           onClick={onProceedToPayment}
           disabled={isCheckingOut}
-          className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
+          className="btn btn-primary w-full"
         >
           {isCheckingOut ? "Proceeding…" : "Proceed to payment"}
         </button>
@@ -67,7 +73,7 @@ export function SelectionSummary({
           type="button"
           onClick={onHoldSelectedSeats}
           disabled={selectedSeats.length === 0 || isHolding}
-          className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
+          className="btn btn-primary w-full"
         >
           {isHolding ? "Holding…" : "Hold selected seats"}
         </button>

@@ -1,15 +1,22 @@
 import type { EventStatus } from "@/types/event";
 
-const STATUS_STYLES: Record<EventStatus, string> = {
-  DRAFT: "bg-zinc-100 text-zinc-600",
-  ON_SALE: "bg-emerald-100 text-emerald-700",
-  SOLD_OUT: "bg-amber-100 text-amber-700",
-  CLOSED: "bg-red-100 text-red-700",
+const STATUS_COLOR: Record<EventStatus, string> = {
+  DRAFT: "var(--status-neutral)",
+  ON_SALE: "var(--status-live)",
+  SOLD_OUT: "var(--status-pending)",
+  CLOSED: "var(--status-danger)",
+};
+
+const STATUS_SOFT: Record<EventStatus, string> = {
+  DRAFT: "var(--status-neutral-soft)",
+  ON_SALE: "var(--status-live-soft)",
+  SOLD_OUT: "var(--status-pending-soft)",
+  CLOSED: "var(--status-danger-soft)",
 };
 
 const STATUS_LABELS: Record<EventStatus, string> = {
   DRAFT: "Draft",
-  ON_SALE: "On sale",
+  ON_SALE: "Live",
   SOLD_OUT: "Sold out",
   CLOSED: "Closed",
 };
@@ -22,8 +29,14 @@ interface EventStatusBadgeProps {
 export function EventStatusBadge({ status }: EventStatusBadgeProps) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLES[status]}`}
+      className="label-mono inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1"
+      style={{ color: STATUS_COLOR[status], backgroundColor: STATUS_SOFT[status] }}
     >
+      <span
+        className={`status-dot ${status === "ON_SALE" ? "status-dot-pulse" : ""}`}
+        style={{ backgroundColor: STATUS_COLOR[status] }}
+        aria-hidden
+      />
       {STATUS_LABELS[status]}
     </span>
   );

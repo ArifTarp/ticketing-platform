@@ -1,15 +1,27 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Space_Grotesk, Inter, Geist_Mono } from "next/font/google";
 import { SessionProvider } from "@/context/SessionProvider";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+/**
+ * Type system for the "control panel" design (see .claude/agents/ui-designer.md): a geometric
+ * display face for headings, a neutral workhorse sans for body copy, and a monospace face
+ * deliberately reused for data-shaped content (prices, seat/ticket ids, countdowns, statuses) to
+ * read as instrumentation rather than prose.
+ */
+const displayFont = Space_Grotesk({
+  variable: "--font-display",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+});
+
+const bodyFont = Inter({
+  variable: "--font-body",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const dataFont = Geist_Mono({
+  variable: "--font-data",
   subsets: ["latin"],
 });
 
@@ -22,7 +34,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${displayFont.variable} ${bodyFont.variable} ${dataFont.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <SessionProvider>{children}</SessionProvider>

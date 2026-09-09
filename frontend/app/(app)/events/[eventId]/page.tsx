@@ -56,8 +56,8 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
   if (isLoading) {
     return (
       <div className="flex flex-col gap-6">
-        <div className="h-24 animate-pulse rounded-lg bg-zinc-200" />
-        <div className="h-40 animate-pulse rounded-lg bg-zinc-200" />
+        <div className="h-24 animate-pulse rounded-[var(--radius-md)] bg-[var(--surface-hover)]" />
+        <div className="h-40 animate-pulse rounded-[var(--radius-md)] bg-[var(--surface-hover)]" />
       </div>
     );
   }
@@ -69,10 +69,7 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
           title="Event not found"
           description="The event you're looking for doesn't exist or was removed."
           action={
-            <Link
-              href="/events"
-              className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
-            >
+            <Link href="/events" className="btn btn-primary">
               Back to events
             </Link>
           }
@@ -88,8 +85,10 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
     <div className="flex flex-col gap-6">
       <EventHeader event={event} />
       <div className="grid grid-cols-1 gap-6 md:grid-cols-[2fr_1fr]">
-        <div className="whitespace-pre-line text-sm leading-6 text-zinc-700">{event.description}</div>
-        <div className="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-4">
+        <div className="whitespace-pre-line text-sm leading-6 text-[var(--text-secondary)]">
+          {event.description}
+        </div>
+        <div className="panel flex flex-col gap-4 p-4">
           <PriceTierList seatCategories={event.seatCategories} />
           <SelectSeatsButton event={event} />
         </div>

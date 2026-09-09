@@ -23,12 +23,12 @@ export function PasswordInput({ id, value, onChange, autoComplete, isDisabled }:
         onChange={(event) => onChange(event.target.value)}
         autoComplete={autoComplete}
         disabled={isDisabled}
-        className="w-full rounded-md border border-zinc-300 px-3 py-2 pr-16 text-sm focus:border-zinc-500 focus:outline-none disabled:bg-zinc-100"
+        className="input-field w-full pr-16 disabled:opacity-50"
       />
       <button
         type="button"
         onClick={() => setIsVisible((prev) => !prev)}
-        className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-medium text-zinc-500 hover:text-zinc-700"
+        className="label-mono absolute right-2 top-1/2 -translate-y-1/2 tracking-normal normal-case text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
       >
         {isVisible ? "Hide" : "Show"}
       </button>

@@ -13,32 +13,51 @@ interface TicketCardProps {
 /** One CONFIRMED booking: event info, seat list, total, and a QrCodeDisplay of the booking id. */
 export function TicketCard({ booking, event }: TicketCardProps) {
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+    <div className="panel flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <span className="label-mono">Booking</span>
+          <span className="value-mono text-[var(--text-primary)]">#{booking.id}</span>
+          <span
+            className="label-mono ml-1 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1"
+            style={{ color: "var(--status-live)", backgroundColor: "var(--status-live-soft)" }}
+          >
+            <span className="status-dot" style={{ backgroundColor: "var(--status-live)" }} aria-hidden />
+            Confirmed
+          </span>
+        </div>
         {event === undefined && (
-          <div className="h-4 w-40 animate-pulse rounded bg-zinc-200" />
+          <div className="h-4 w-40 animate-pulse rounded-[var(--radius-sm)] bg-[var(--surface-hover)]" />
         )}
         {event === null && (
-          <h3 className="text-base font-semibold text-zinc-900">Event #{booking.eventId}</h3>
+          <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-[var(--text-primary)]">
+            Event #{booking.eventId}
+          </h3>
         )}
         {event && (
           <>
-            <h3 className="text-base font-semibold text-zinc-900">{event.title}</h3>
-            <p className="text-sm text-zinc-500">
-              {event.venue.name} · {formatEventDate(event.startsAt)}
+            <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-[var(--text-primary)]">
+              {event.title}
+            </h3>
+            <p className="text-sm text-[var(--text-secondary)]">
+              {event.venue.name} · <span className="value-mono">{formatEventDate(event.startsAt)}</span>
             </p>
           </>
         )}
-        <ul className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-zinc-700">
+        <ul className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
           {booking.items.map((item) => (
-            <li key={item.seatId}>Seat #{item.seatId}</li>
+            <li key={item.seatId} className="value-mono text-[var(--text-secondary)]">
+              Seat #{item.seatId}
+            </li>
           ))}
         </ul>
-        <p className="text-sm font-medium text-zinc-900">Total: {formatPrice(booking.total)}</p>
+        <p className="value-mono text-sm font-medium text-[var(--text-primary)]">
+          Total: {formatPrice(booking.total)}
+        </p>
       </div>
       <div className="flex flex-col items-center gap-2">
         <QrCodeDisplay value={String(booking.id)} />
-        <span className="text-xs text-zinc-500">Booking #{booking.id}</span>
+        <span className="label-mono">Booking #{booking.id}</span>
       </div>
     </div>
   );

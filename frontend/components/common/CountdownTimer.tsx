@@ -13,16 +13,23 @@ export function CountdownTimer({ expiresAt }: CountdownTimerProps) {
     return null;
   }
 
+  const tone = isExpired ? "danger" : isExpiring ? "pending" : "neutral";
+  const toneVars = {
+    danger: { color: "var(--status-danger)", bg: "var(--status-danger-soft)" },
+    pending: { color: "var(--status-pending)", bg: "var(--status-pending-soft)" },
+    neutral: { color: "var(--text-secondary)", bg: "var(--surface)" },
+  }[tone];
+
   return (
     <div
-      className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
-        isExpired
-          ? "border-red-300 bg-red-50 text-red-700"
-          : isExpiring
-            ? "border-amber-300 bg-amber-50 text-amber-700"
-            : "border-zinc-200 bg-white text-zinc-700"
-      }`}
+      className="value-mono flex items-center gap-2 rounded-[var(--radius-sm)] border px-3 py-1.5 text-sm font-medium"
+      style={{ borderColor: toneVars.color, backgroundColor: toneVars.bg, color: toneVars.color }}
     >
+      <span
+        className={`status-dot ${!isExpired ? "status-dot-pulse" : ""}`}
+        style={{ backgroundColor: toneVars.color }}
+        aria-hidden
+      />
       {isExpired ? "Hold expired" : `Hold expires in ${label}`}
     </div>
   );

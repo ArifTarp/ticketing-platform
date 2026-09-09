@@ -33,7 +33,7 @@ export function VenueSelect({
 
   if (isCreatingVenue) {
     return (
-      <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3">
+      <div className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-sunken)] p-3">
         <VenueMiniForm
           onCreated={(venue) => {
             onVenueCreated(venue);
@@ -52,7 +52,7 @@ export function VenueSelect({
         value={selectedVenueId ?? ""}
         onChange={(e) => onSelect(Number(e.target.value))}
         disabled={isDisabled || venues.length === 0}
-        className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none disabled:bg-zinc-100"
+        className="input-field flex-1 disabled:opacity-50"
       >
         <option value="" disabled>
           {venues.length === 0 ? "No venues yet — create one" : "Select a venue"}
@@ -67,7 +67,7 @@ export function VenueSelect({
         type="button"
         onClick={() => setIsCreatingVenue(true)}
         disabled={isDisabled}
-        className="whitespace-nowrap rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+        className="btn btn-secondary whitespace-nowrap disabled:cursor-not-allowed"
       >
         + new venue
       </button>

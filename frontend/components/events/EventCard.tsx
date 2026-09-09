@@ -13,17 +13,27 @@ export function EventCard({ event }: EventCardProps) {
   return (
     <Link
       href={`/events/${event.id}`}
-      className="flex flex-col gap-2 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm transition hover:shadow-md"
+      className="panel panel-interactive flex flex-col gap-3 p-4"
     >
+      <div
+        className="h-20 w-full rounded-[var(--radius-sm)] border border-[var(--border)]"
+        style={{
+          background:
+            "linear-gradient(135deg, var(--accent-soft) 0%, var(--surface-hover) 55%, var(--surface) 100%)",
+        }}
+        aria-hidden
+      />
       <div className="flex items-start justify-between gap-2">
-        <h3 className="text-base font-semibold text-zinc-900">{event.title}</h3>
+        <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-[var(--text-primary)]">
+          {event.title}
+        </h3>
         <EventStatusBadge status={event.status} />
       </div>
-      <p className="text-sm text-zinc-500">
-        {event.venueName} · {event.city}
+      <p className="label-mono">
+        {event.venueName} &middot; {event.city}
       </p>
-      <p className="text-sm text-zinc-500">{formatEventDate(event.startsAt)}</p>
-      <p className="mt-auto text-sm font-medium text-zinc-900">
+      <p className="label-mono">{formatEventDate(event.startsAt)}</p>
+      <p className="value-mono mt-auto text-sm font-medium text-[var(--text-primary)]">
         {event.fromPrice !== null ? `From ${formatPrice(event.fromPrice)}` : "Pricing TBA"}
       </p>
     </Link>

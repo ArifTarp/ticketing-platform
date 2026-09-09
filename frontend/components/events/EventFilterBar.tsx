@@ -30,9 +30,9 @@ export function EventFilterBar({ onFilterChange }: EventFilterBarProps) {
   }, [city, query, from, to, onFilterChange]);
 
   return (
-    <div className="flex flex-wrap items-end gap-3 rounded-lg border border-zinc-200 bg-white p-4">
+    <div className="panel flex flex-wrap items-end gap-3 p-4">
       <div className="flex flex-col gap-1">
-        <label htmlFor="filter-city" className="text-xs font-medium text-zinc-500">
+        <label htmlFor="filter-city" className="label-mono">
           City
         </label>
         <input
@@ -40,11 +40,11 @@ export function EventFilterBar({ onFilterChange }: EventFilterBarProps) {
           value={city}
           onChange={(event) => setCity(event.target.value)}
           placeholder="Any city"
-          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm focus:border-zinc-500 focus:outline-none"
+          className="input-field"
         />
       </div>
       <div className="flex flex-col gap-1">
-        <label htmlFor="filter-from" className="text-xs font-medium text-zinc-500">
+        <label htmlFor="filter-from" className="label-mono">
           From
         </label>
         <input
@@ -52,11 +52,11 @@ export function EventFilterBar({ onFilterChange }: EventFilterBarProps) {
           type="date"
           value={from}
           onChange={(event) => setFrom(event.target.value)}
-          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm focus:border-zinc-500 focus:outline-none"
+          className="input-field"
         />
       </div>
       <div className="flex flex-col gap-1">
-        <label htmlFor="filter-to" className="text-xs font-medium text-zinc-500">
+        <label htmlFor="filter-to" className="label-mono">
           To
         </label>
         <input
@@ -64,11 +64,11 @@ export function EventFilterBar({ onFilterChange }: EventFilterBarProps) {
           type="date"
           value={to}
           onChange={(event) => setTo(event.target.value)}
-          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm focus:border-zinc-500 focus:outline-none"
+          className="input-field"
         />
       </div>
       <div className="flex flex-1 flex-col gap-1">
-        <label htmlFor="filter-search" className="text-xs font-medium text-zinc-500">
+        <label htmlFor="filter-search" className="label-mono">
           Search
         </label>
         <input
@@ -76,7 +76,7 @@ export function EventFilterBar({ onFilterChange }: EventFilterBarProps) {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search events…"
-          className="w-full rounded-md border border-zinc-300 px-3 py-1.5 text-sm focus:border-zinc-500 focus:outline-none"
+          className="input-field w-full"
         />
       </div>
     </div>

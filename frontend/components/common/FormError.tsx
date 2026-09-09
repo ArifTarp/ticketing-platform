@@ -11,9 +11,15 @@ export function FormError({ message }: FormErrorProps) {
   return (
     <div
       role="alert"
-      className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700"
+      className="flex items-start gap-2 rounded-[var(--radius-sm)] border px-4 py-3 text-sm"
+      style={{
+        borderColor: "var(--status-danger)",
+        backgroundColor: "var(--status-danger-soft)",
+        color: "var(--status-danger)",
+      }}
     >
-      {message}
+      <span className="status-dot mt-1.5 bg-[var(--status-danger)]" aria-hidden />
+      <span>{message}</span>
     </div>
   );
 }

@@ -45,10 +45,15 @@ export function PaymentForm({ isDisabled, onPay }: PaymentFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-4">
-      <h2 className="text-sm font-semibold text-zinc-900">Payment details</h2>
+    <form onSubmit={handleSubmit} className="panel flex flex-col gap-4 p-5">
+      <div className="flex items-center gap-3">
+        <span className="value-mono flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] text-xs text-[var(--accent)]">
+          2
+        </span>
+        <h2 className="label-mono">Payment details</h2>
+      </div>
       <FormError message={error} />
-      <label className="flex flex-col gap-1 text-sm">
+      <label className="flex flex-col gap-1.5 text-sm text-[var(--text-secondary)]">
         Card number
         <input
           type="text"
@@ -57,11 +62,11 @@ export function PaymentForm({ isDisabled, onPay }: PaymentFormProps) {
           value={cardNumber}
           onChange={(e) => setCardNumber(e.target.value)}
           disabled={isDisabled}
-          className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none disabled:bg-zinc-100"
+          className="input-field value-mono disabled:opacity-50"
         />
       </label>
       <div className="flex gap-3">
-        <label className="flex flex-1 flex-col gap-1 text-sm">
+        <label className="flex flex-1 flex-col gap-1.5 text-sm text-[var(--text-secondary)]">
           Expiry
           <input
             type="text"
@@ -69,10 +74,10 @@ export function PaymentForm({ isDisabled, onPay }: PaymentFormProps) {
             value={expiry}
             onChange={(e) => setExpiry(e.target.value)}
             disabled={isDisabled}
-            className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none disabled:bg-zinc-100"
+            className="input-field value-mono disabled:opacity-50"
           />
         </label>
-        <label className="flex flex-1 flex-col gap-1 text-sm">
+        <label className="flex flex-1 flex-col gap-1.5 text-sm text-[var(--text-secondary)]">
           CVC
           <input
             type="text"
@@ -81,15 +86,11 @@ export function PaymentForm({ isDisabled, onPay }: PaymentFormProps) {
             value={cvc}
             onChange={(e) => setCvc(e.target.value)}
             disabled={isDisabled}
-            className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none disabled:bg-zinc-100"
+            className="input-field value-mono disabled:opacity-50"
           />
         </label>
       </div>
-      <button
-        type="submit"
-        disabled={isDisabled}
-        className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
-      >
+      <button type="submit" disabled={isDisabled} className="btn btn-primary w-full">
         Pay now
       </button>
     </form>

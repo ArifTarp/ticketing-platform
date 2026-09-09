@@ -136,8 +136,8 @@ export default function SeatSelectionPage({ params }: SeatSelectionPageProps) {
   if (isLoading) {
     return (
       <div className="flex flex-col gap-6">
-        <div className="h-10 w-64 animate-pulse rounded-md bg-zinc-200" />
-        <div className="h-96 animate-pulse rounded-lg bg-zinc-200" />
+        <div className="h-10 w-64 animate-pulse rounded-[var(--radius-sm)] bg-[var(--surface-hover)]" />
+        <div className="h-96 animate-pulse rounded-[var(--radius-md)] bg-[var(--surface-hover)]" />
       </div>
     );
   }
@@ -148,10 +148,7 @@ export default function SeatSelectionPage({ params }: SeatSelectionPageProps) {
         title="Couldn't load the seat map"
         description={loadError ?? "Something went wrong."}
         action={
-          <Link
-            href={`/events/${eventId}`}
-            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
-          >
+          <Link href={`/events/${eventId}`} className="btn btn-primary">
             Back to event
           </Link>
         }
@@ -162,9 +159,11 @@ export default function SeatSelectionPage({ params }: SeatSelectionPageProps) {
   const availabilityBySeatId = toAvailabilityMap(availability);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 pb-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-zinc-900">Select your seats</h1>
+        <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold text-[var(--text-primary)]">
+          Select your seats
+        </h1>
         <CountdownTimer expiresAt={selection.booking?.expiresAt ?? null} />
       </div>
 
@@ -173,13 +172,21 @@ export default function SeatSelectionPage({ params }: SeatSelectionPageProps) {
         onDismiss={() => setRaceConflictMessage(null)}
       />
       {checkoutError && (
-        <p className="text-sm text-red-700" role="alert">
+        <p
+          className="rounded-[var(--radius-sm)] border px-4 py-3 text-sm"
+          role="alert"
+          style={{
+            borderColor: "var(--status-danger)",
+            backgroundColor: "var(--status-danger-soft)",
+            color: "var(--status-danger)",
+          }}
+        >
           {checkoutError}
         </p>
       )}
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-[2fr_1fr]">
-        <div className="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-4">
+        <div className="panel flex flex-col gap-4 p-4">
           <SeatMap
             seats={seatMap.seats}
             availabilityBySeatId={availabilityBySeatId}

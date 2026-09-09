@@ -68,7 +68,7 @@ export function TicketList() {
           <button
             type="button"
             onClick={() => setReloadToken((prev) => prev + 1)}
-            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
+            className="btn btn-primary"
           >
             Retry
           </button>
@@ -83,10 +83,7 @@ export function TicketList() {
         title="No tickets yet"
         description="Browse events to book your first seats."
         action={
-          <Link
-            href="/events"
-            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
-          >
+          <Link href="/events" className="btn btn-primary">
             Browse events
           </Link>
         }
