@@ -6,6 +6,13 @@ spring:
     name: gateway
   cloud:
     gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "http://localhost:3000"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            allowCredentials: true
       routes:
         # --- auth (Phase 3) -------------------------------------------------------------------
         # Public: register/login are exactly the calls a client makes when it has no token yet.

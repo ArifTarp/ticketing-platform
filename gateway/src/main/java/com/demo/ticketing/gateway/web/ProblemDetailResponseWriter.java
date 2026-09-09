@@ -34,6 +34,7 @@ public class ProblemDetailResponseWriter {
         problemDetail.setInstance(URI.create(exchange.getRequest().getPath().value()));
 
         ServerHttpResponse response = exchange.getResponse();
+        addCorsHeaders(exchange, response);
         response.setStatusCode(status);
         response.getHeaders().setContentType(MediaType.APPLICATION_PROBLEM_JSON);
 
@@ -45,5 +46,15 @@ public class ProblemDetailResponseWriter {
         }
         DataBuffer buffer = response.bufferFactory().wrap(body);
         return response.writeWith(Mono.just(buffer));
+    }
+
+    private void addCorsHeaders(ServerWebExchange exchange, ServerHttpResponse response) {
+        String origin = exchange.getRequest().getHeaders().getOrigin();
+        if (origin != null && "http://localhost:3000".equals(origin)) {
+            response.getHeaders().add("Access-Control-Allow-Origin", origin);
+            response.getHeaders().add("Access-Control-Allow-Credentials", "true");
+            response.getHeaders().add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+            response.getHeaders().add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        }
     }
 }
