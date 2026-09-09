@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -21,6 +22,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -51,10 +53,17 @@ class BookingHoldControllerTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
     private ResponseEntity<JsonNode> hold(HoldBookingRequest request) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         return restTemplate.postForEntity("/api/v1/bookings/hold", new HttpEntity<>(request, headers), JsonNode.class);
+    }
+
+    private String redisHoldKey(long eventId, long seatId) {
+        return "booking:seat-hold:" + eventId + ":" + seatId;
     }
 
     private void seedSeatAvailability(long eventId, long seatId, String status) {
@@ -214,5 +223,48 @@ class BookingHoldControllerTest {
                 "SELECT count(*) FROM booking_items bi JOIN bookings b ON b.id = bi.booking_id "
                         + "WHERE b.event_id = ?", Long.class, eventId);
         assertThat(bookingItemCount).isEqualTo(5L);
+    }
+
+    /**
+     * Regression test for the concurrency bug fixed alongside this test: ADR-0004's append path
+     * extends the booking's DB {@code expires_at} to a fresh 10-minute window, but before the fix
+     * only the newly-requested seat's Redis key was refreshed — a seat held by an earlier call kept
+     * its original TTL and could expire out of Redis while the DB still considered it validly held.
+     *
+     * <p>Rather than sleeping past a real 10-minute TTL, this shrinks seat A's Redis TTL directly
+     * (simulating most of the window having already elapsed) right after the first hold call, then
+     * asserts the append call pushes it back out to (approximately) a fresh {@code HOLD_TTL} —
+     * proving {@code BookingHoldService} actually refreshed it, not just that time hadn't passed.
+     */
+    @Test
+    void appendingSeatsToAnExistingPendingBookingRefreshesTheRedisTtlOfPreviouslyHeldSeats() {
+        long eventId = 5008L;
+        long seatA = 1L;
+        long seatB = 2L;
+
+        HoldBookingRequest first = new HoldBookingRequest(1L, eventId,
+                List.of(new HoldSeatRequest(seatA, new BigDecimal("100.00"))));
+        ResponseEntity<JsonNode> firstResponse = hold(first);
+        assertThat(firstResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        String seatAKey = redisHoldKey(eventId, seatA);
+        assertThat(redisTemplate.hasKey(seatAKey)).isTrue();
+
+        // Simulate the earlier call's hold being close to expiry, well before the DB's expires_at
+        // will be — the exact window the bug leaves seat A vulnerable in.
+        redisTemplate.expire(seatAKey, Duration.ofSeconds(5));
+        assertThat(redisTemplate.getExpire(seatAKey)).isBetween(1L, 5L);
+
+        HoldBookingRequest second = new HoldBookingRequest(1L, eventId,
+                List.of(new HoldSeatRequest(seatB, new BigDecimal("150.00"))));
+        ResponseEntity<JsonNode> secondResponse = hold(second);
+        assertThat(secondResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        // Seat A's Redis TTL must have been refreshed back out to (approximately) a fresh 10-minute
+        // HOLD_TTL by the append, not left at the shrunk value from before.
+        Long seatATtlAfterAppend = redisTemplate.getExpire(seatAKey);
+        assertThat(seatATtlAfterAppend).isGreaterThan(500L);
+
+        assertThat(redisTemplate.hasKey(redisHoldKey(eventId, seatB))).isTrue();
     }
 }

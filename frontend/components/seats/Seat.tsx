@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { SeatDto } from "@/types/event";
 import type { SeatVisualStatus } from "@/lib/seatMap";
 
@@ -24,8 +25,19 @@ const STATUS_CLASSES: Record<SeatVisualStatus, string> = {
     "border-[var(--status-danger)]/60 bg-[var(--status-danger-soft)] text-[var(--text-muted)] cursor-not-allowed opacity-60",
 };
 
-/** Single seat square; visual variant is a pure function of its merged SeatAvailability status. */
-export function Seat({ seat, status, onClick, isLocked = false }: SeatProps) {
+/**
+ * Single seat square; visual variant is a pure function of its merged SeatAvailability status.
+ *
+ * Wrapped in `memo` because `SeatMap` renders one of these per seat (up to ~80+ on screen at
+ * once, more on a bigger venue) — without it, a single seat's status changing (e.g. selecting one
+ * seat, or one availability row flipping HELD->SOLD after a poll) re-renders every other seat's
+ * button too, since `SeatMap`'s own re-render otherwise re-invokes every child unconditionally.
+ * `onClick` is intentionally excluded from the default shallow-prop comparison's concern here: the
+ * only actually-changing identity across renders is `useSeatSelection().toggleSeat`, which is
+ * already `useCallback`-stabilized, so the default `memo` comparator (shallow-equal on all props)
+ * is sufficient without a custom comparator.
+ */
+export const Seat = memo(function Seat({ seat, status, onClick, isLocked = false }: SeatProps) {
   const isClickable = !isLocked && (status === "AVAILABLE" || status === "SELECTED");
 
   return (
@@ -40,4 +52,4 @@ export function Seat({ seat, status, onClick, isLocked = false }: SeatProps) {
       {seat.number}
     </button>
   );
-}
+});

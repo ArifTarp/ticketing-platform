@@ -516,16 +516,18 @@ prove the saga and concurrency handling actually work, not just the happy path.
   seat-level admin editing is out of scope for this screen (only seat *categories*, matching the
   Phase 14 endpoint `/events/{id}/seat-categories`).
 - `FormError` — reused from screen 1, generic inline error banner (403, validation errors).
-- API client: `fetchEvents()` (reused, admin view requests all statuses, not just `ON_SALE`),
-  `createVenue()`, `createEvent()`, `createSeatCategories()` in a new `adminApi.ts` (camelCase,
-  verb-first, per frontend naming convention) — or co-located in `eventApi.ts` if that file already
-  exists; naming, not scope, decision left to `frontend`.
+- API client: `fetchAdminEvents()` (calls `GET /api/v1/admin/events`, a separate endpoint from the
+  public `fetchEvents()` — the gateway gates routes by path prefix, not query params, so `ADMIN`-only
+  access to "all statuses" couldn't be layered onto the public `GET /api/v1/events?status=` path;
+  a distinct `/api/v1/admin/**` prefix is what let the public listing stay genuinely public while
+  the admin listing is role-gated), `createVenue()`, `createEvent()`, `createSeatCategories()` in
+  `adminApi.ts` (camelCase, verb-first, per frontend naming convention).
 
 **States**
 - Guard/forbidden: non-`ADMIN` JWT (or none) hits `/admin/events` → `AdminGuard` redirects to
   `/events` or renders a 403 `EmptyState` — never renders `EventTable`/`EventForm`. Mirrors the
   gateway/backend returning 403 for a non-admin JWT on `POST /venues` / `/events`.
-- Loading: skeleton rows in `EventTable` while `GET /api/v1/events` (admin view, unfiltered by
+- Loading: skeleton rows in `EventTable` while `GET /api/v1/admin/events` (ADMIN-only, every
   status) is in flight.
 - Empty: no events exist yet → `EmptyState` "No events yet — create one" (reuses screen 2/7's
   `EmptyState`).
@@ -534,8 +536,10 @@ prove the saga and concurrency handling actually work, not just the happy path.
   "Save event" disabled until title, venue, starts-at, and ≥1 valid seat category are filled.
 - Form — pre-filled (edit mode): fields populated from the selected `Event`; existing seat
   categories load into `SeatCategoryList`.
-- Form — submitting: "Save event" shows spinner, fields disabled, calls `POST /api/v1/events` (or
-  update) then `POST /api/v1/events/{id}/seat-categories`.
+- Form — submitting: "Save event" shows spinner, fields disabled, calls `POST /api/v1/events`
+  (create mode) then `POST /api/v1/events/{id}/seat-categories` for the category rows; in edit
+  mode there is no update call for the event's own fields — only
+  `POST /api/v1/events/{id}/seat-categories` for newly added tiers.
 - Form — error: 403 (role check failed server-side despite client guard) → `FormError` "You don't
   have permission to do this."; 400/422 validation (e.g. missing required field, non-positive
   price) → `FormError` with the specific message; venue-creation inline mini-form has its own
@@ -544,7 +548,8 @@ prove the saga and concurrency handling actually work, not just the happy path.
 
 **Interaction flow**
 1. `ADMIN`-role user navigates to `/admin/events` → `AdminGuard` checks the JWT's `roles` claim →
-   passes → `EventTable` fetches `GET /api/v1/events` (all statuses) → loading skeleton, then rows.
+   passes → `EventTable` fetches `GET /api/v1/admin/events` (all statuses) → loading skeleton, then
+   rows.
 2. A non-`ADMIN` user (or logged-out) hits the same route → `AdminGuard` blocks rendering, shows
    403/`EmptyState` or redirects — no table or form ever mounts, no admin API call is attempted.
 3. User clicks "+ Create event" → `EventForm` opens (modal/slide-over) in create mode, empty.
@@ -557,9 +562,11 @@ prove the saga and concurrency handling actually work, not just the happy path.
    `createSeatCategories()` → `POST /api/v1/events/{id}/seat-categories` for the category rows →
    on success, form closes, `EventTable` refetches and shows the new row with its status badge.
 7. User clicks "Edit" on an existing row → `EventForm` opens pre-filled with that `Event`'s fields
-   and existing seat categories → user changes status from `DRAFT` to `ON_SALE` (the transition
-   that makes it visible on the public `/events` list per the `event` status lifecycle) → saves →
-   table updates in place.
+   and existing seat categories, but title/description/starts-at/status render **read-only** with a
+   banner explaining there's no update endpoint yet — the user cannot change the event's own fields
+   from here. They can still add new `SeatCategoryList` rows and save; only those new categories
+   are submitted (`POST /api/v1/events/{id}/seat-categories`), and `EventTable` refetches to show
+   the added tiers.
 8. Any admin API call returning 403 mid-session (e.g. JWT role changed/expired) → `FormError`
    shown, form stays open with the user's unsaved input intact so they don't lose it.
 

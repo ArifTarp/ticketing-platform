@@ -1,14 +1,20 @@
 import type { SeatCategoryDto } from "@/types/event";
+import { formatPrice } from "@/lib/formatPrice";
 
 /** One editable, not-yet-submitted seat category row — price kept as a string for the input. */
 export interface SeatCategoryRow {
+  /** Stable client-side identity for React keys — never sent to the API. */
+  key: string;
   name: string;
   price: string;
   section: string;
 }
 
+let nextRowKey = 0;
+
 export function createEmptySeatCategoryRow(): SeatCategoryRow {
-  return { name: "", price: "", section: "" };
+  nextRowKey += 1;
+  return { key: `row-${nextRowKey}`, name: "", price: "", section: "" };
 }
 
 /** A row is valid once all three fields are filled and price is a positive number. */
@@ -61,14 +67,14 @@ export function SeatCategoryList({
           {existingCategories.map((category) => (
             <div key={category.id} className="flex justify-between">
               <span>{category.name}</span>
-              <span className="value-mono">${category.price}</span>
+              <span className="value-mono">{formatPrice(category.price)}</span>
             </div>
           ))}
         </div>
       )}
 
       {rows.map((row, index) => (
-        <div key={index} className="flex flex-wrap gap-2">
+        <div key={row.key} className="flex flex-wrap gap-2">
           <input
             type="text"
             placeholder="Name (e.g. VIP)"

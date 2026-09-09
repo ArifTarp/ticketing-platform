@@ -46,6 +46,23 @@ public class SeatHoldLockService {
                     + "else return 0 end",
             Long.class);
 
+    /**
+     * Refreshes a key's TTL back out to {@link #HOLD_TTL} only if the key is still present —
+     * a no-op (returns {@code 0}) if it already expired. No {@code holdToken} comparison is
+     * possible here (unlike {@link #RELEASE_IF_OWNED}): the caller extending a
+     * <em>previously</em>-acquired seat's TTL (ADR-0004's append-to-pending-booking path in
+     * {@code BookingHoldService}) never had that seat's original {@code holdToken} in the first
+     * place — it belongs to an earlier, unrelated hold request. Safe for the same reason
+     * {@link #forceRelease} documents: {@code SeatAvailability} is the durable source of truth
+     * gating re-acquisition, so refreshing whatever key happens to still be there (if any)
+     * can never let a second holder believe it owns a seat this booking's DB row also claims.
+     */
+    private static final RedisScript<Long> EXTEND_IF_PRESENT = new DefaultRedisScript<>(
+            "if redis.call('exists', KEYS[1]) == 1 then "
+                    + "return redis.call('expire', KEYS[1], ARGV[1]) "
+                    + "else return 0 end",
+            Long.class);
+
     private final StringRedisTemplate redisTemplate;
 
     public SeatHoldLockService(StringRedisTemplate redisTemplate) {
@@ -66,6 +83,24 @@ public class SeatHoldLockService {
     /** Releases the lock/hold only if it is still owned by {@code holdToken}; a no-op otherwise. */
     public void release(Long eventId, Long seatId, String holdToken) {
         redisTemplate.execute(RELEASE_IF_OWNED, List.of(key(eventId, seatId)), holdToken);
+    }
+
+    /**
+     * Refreshes the {@code eventId:seatId} key's TTL back out to {@link #HOLD_TTL}, if the key is
+     * still present. Used by {@code BookingHoldService.holdSeats}'s ADR-0004 append path: when a
+     * second {@code hold} call for the same {@code (userId, eventId)} pair pushes the existing
+     * {@code PENDING} booking's DB {@code expires_at} out to a new window, every seat already held
+     * by that booking (not just the newly requested ones) must have its Redis TTL pushed out to
+     * match — otherwise its lock/hold key can expire out from under a booking/{@code
+     * SeatAvailability} row that the DB still says is live. Returns {@code true} if a key was
+     * actually refreshed, {@code false} if it had already expired (a real but pre-existing gap this
+     * method deliberately does not attempt to paper over — see {@code services/booking/CLAUDE.md}'s
+     * "Known gap: no timeout sweep yet").
+     */
+    public boolean extendTtl(Long eventId, Long seatId) {
+        Long refreshed = redisTemplate.execute(
+                EXTEND_IF_PRESENT, List.of(key(eventId, seatId)), String.valueOf(HOLD_TTL.getSeconds()));
+        return refreshed != null && refreshed == 1L;
     }
 
     /**

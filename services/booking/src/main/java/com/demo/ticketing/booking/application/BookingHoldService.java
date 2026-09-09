@@ -107,6 +107,7 @@ public class BookingHoldService {
                 acquiredSeatIds.add(seatId);
             }
             Booking booking = persistHoldWithRetry(request);
+            refreshPreviouslyHeldSeatTtls(request, booking, seatIds);
             return bookingMapper.toResponse(booking);
         } catch (RuntimeException ex) {
             // Whole-request rollback per business-rules.md's concurrent seat-race path: release
@@ -120,6 +121,39 @@ public class BookingHoldService {
                 lockService.release(request.eventId(), seatId, holdToken);
             }
             throw ex;
+        }
+    }
+
+    /**
+     * ADR-0004's append path ({@link #persistHold}) pushes an existing {@code PENDING} booking's DB
+     * {@code expires_at} out to a fresh {@link SeatHoldLockService#HOLD_TTL}-away window via
+     * {@link Booking#extendExpiry}, but the Redis-lock loop in {@link #holdSeats} only ever
+     * acquires (and thus TTL-refreshes) the seats requested by <em>this</em> call. Seats already
+     * held by an earlier call to the same {@code (userId, eventId)} booking keep their original
+     * Redis TTL unless this method also refreshes them — otherwise their lock/hold key can expire
+     * out of Redis minutes before the booking's DB row (and that seat's still-{@code HELD} {@code
+     * SeatAvailability} row) actually does.
+     *
+     * <p>Runs after {@link #persistHoldWithRetry} has already committed — not before, and not
+     * inside that transaction — because only the committed {@code booking}'s item list reliably
+     * tells us which seatIds pre-existed vs. were just added by this request (works for both the
+     * append case and the brand-new-booking case, where the difference is always empty). This
+     * mirrors this class's existing convention of keeping Redis calls outside of any DB
+     * transaction.
+     */
+    private void refreshPreviouslyHeldSeatTtls(HoldBookingRequest request, Booking booking, List<Long> newlyRequestedSeatIds) {
+        Set<Long> requested = new LinkedHashSet<>(newlyRequestedSeatIds);
+        for (BookingItem item : booking.getItems()) {
+            if (requested.contains(item.getSeatId())) {
+                continue;
+            }
+            boolean refreshed = lockService.extendTtl(request.eventId(), item.getSeatId());
+            if (!refreshed) {
+                log.warn("Could not refresh Redis hold TTL for previously-held seatId={} on bookingId={} "
+                                + "(eventId={}) — its Redis key had already expired; SeatAvailability/booking "
+                                + "DB state is now ahead of Redis until Phase 8's timeout sweep exists",
+                        item.getSeatId(), booking.getId(), request.eventId());
+            }
         }
     }
 
