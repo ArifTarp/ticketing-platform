@@ -1,0 +1,48 @@
+#!/bin/sh
+# Repo-level pre-commit gate — fires for ANY commit (a human's own `git commit`, or one Claude
+# Code runs), unlike the Claude-Code-level hooks in .claude/settings.json which only fire for
+# tool calls this harness makes. Enabled via:
+#   git config core.hooksPath .githooks
+#
+# Deliberately plain POSIX sh, not Husky: this repo is mixed Java + TypeScript with no root
+# package.json, and a shell script covers both without adding an npm dependency just to manage
+# git hooks.
+set -e
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACM)
+
+# --- Frontend: eslint + typecheck (fast, so a full block is reasonable) ---
+if echo "$STAGED" | grep -q '^frontend/'; then
+  echo "[pre-commit] frontend files changed — running lint + typecheck"
+  ( cd frontend && pnpm lint && npx tsc --noEmit ) || {
+    echo "[pre-commit] FAILED: frontend lint/typecheck. Fix the above and re-commit." >&2
+    exit 1
+  }
+fi
+
+# --- Backend: compile only (not the full Testcontainers test suite — too slow to gate every
+# commit on; that belongs in CI or an explicit `mvn test` run) for whichever Maven module(s)
+# actually changed. ---
+BACKEND_MODULES=$(echo "$STAGED" | grep -E '^(services/[A-Za-z0-9_-]+|gateway)/' | \
+  sed -E 's#^(services/[A-Za-z0-9_-]+|gateway)/.*#\1#' | sort -u | tr '\n' ',' | sed 's/,$//')
+
+if [ -n "$BACKEND_MODULES" ]; then
+  # Best-effort JDK discovery for this machine if java/mvn aren't already on PATH — see the
+  # ticketing_local_toolchain project memory for why this exists. Falls through harmlessly on
+  # a machine where java is already resolvable.
+  if ! command -v java >/dev/null 2>&1; then
+    CANDIDATE_JAVA_HOME="/c/Program Files/Eclipse Adoptium/jdk-21.0.12.101-hotspot"
+    if [ -d "$CANDIDATE_JAVA_HOME" ]; then
+      export JAVA_HOME="$CANDIDATE_JAVA_HOME"
+      export PATH="$JAVA_HOME/bin:$PATH"
+    fi
+  fi
+
+  echo "[pre-commit] backend module(s) changed: $BACKEND_MODULES — compiling"
+  ./mvnw -q -pl "$BACKEND_MODULES" compile || {
+    echo "[pre-commit] FAILED: backend compile for [$BACKEND_MODULES]. Fix the above and re-commit." >&2
+    exit 1
+  }
+fi
+
+echo "[pre-commit] checks passed"

@@ -1,0 +1,43 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "cd \"C:\\Users\\Arif\\Desktop\\AI-Works\\ticketing-platform\" && docker compose ps 2>&1 || true",
+            "statusMessage": "Checking local infra state (docker compose ps)..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "cd \"C:\\Users\\Arif\\Desktop\\AI-Works\\ticketing-platform\" && (git diff --quiet -- frontend && git diff --cached --quiet -- frontend) && exit 0; cd frontend && npx tsc --noEmit",
+            "statusMessage": "Typechecking frontend/ after edit..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "if": "Bash(git commit*)",
+            "command": "cd \"C:\\Users\\Arif\\Desktop\\AI-Works\\ticketing-platform\" && git diff --cached --quiet -- frontend && exit 0; cd frontend && pnpm lint && npx tsc --noEmit",
+            "statusMessage": "Pre-commit gate: linting + typechecking staged frontend changes..."
+          }
+        ]
+      }
+    ]
+  }
+}

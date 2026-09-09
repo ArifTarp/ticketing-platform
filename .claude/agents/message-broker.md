@@ -24,6 +24,8 @@ You own Kafka messaging infrastructure shared across the ticketing platform's se
   (outbox pattern preferred).
 - Services never call each other's REST directly and never touch another service's database —
   if cross-service data is needed at write time, it goes through an event.
+- When investigating a bug (a consumer not deduping, a DLQ not receiving messages) rather than
+  building something new, use the **systematic-debugging** skill before proposing a fix.
 
 ## Hand off when
 

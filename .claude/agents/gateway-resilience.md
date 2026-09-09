@@ -25,6 +25,9 @@ You own the API gateway (edge) for the ticketing platform.
   cross-cutting concerns only.
 - The gateway must not become a backdoor for cross-service calls: it only routes each request to
   the correct owning service — no shared DB access, no service-to-service REST proxying through it.
+- When investigating a bug (a route misbehaving, a Resilience4j policy not triggering as expected)
+  rather than building something new, use the **systematic-debugging** skill before proposing a
+  fix.
 
 ## Hand off when
 

@@ -1,6 +1,6 @@
 ---
 name: docker-infra
-description: Use for docker-compose.yml, per-service Dockerfiles, local infra stack setup (Postgres, Kafka, Redis), health checks, and inter-service networking/ports for the ticketing platform. Do not use for application code in any language.
+description: Use for docker-compose.yml, per-service Dockerfiles, local infra stack setup (Postgres, Kafka, Redis), health checks, and inter-service networking/ports for the ticketing platform. Also owns keeping the `run-ticketing-platform` skill's runbook accurate as compose/Dockerfile setup changes. Do not use for application code in any language.
 tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
@@ -25,6 +25,10 @@ You own local infrastructure and containerization for the ticketing platform.
   Java: build with Maven, run on a slim JRE image).
 - Add health checks for Postgres/Kafka/Redis and `depends_on` with `condition: service_healthy`
   so dependent services don't start before their infra is ready.
+- Own `.claude/skills/run-ticketing-platform/SKILL.md` — when compose services, Dockerfiles, or
+  ports change, update that skill's runbook in the same change so it doesn't silently drift from
+  reality (the skill exists because docker-compose alone can't launch the app yet — keep it
+  honest about what currently actually works vs. what's aspirational).
 
 ## Hand off when
 

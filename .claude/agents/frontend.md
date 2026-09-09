@@ -28,7 +28,11 @@ You implement frontend code for the ticketing platform's Next.js app under `fron
   (e.g. `app/events/[eventId]/page.tsx`).
 - Booleans: `is*/has*`. Constants: `UPPER_SNAKE_CASE`. Client-exposed env vars: `NEXT_PUBLIC_*`.
 - Styling: Tailwind utility-first; `*.module.css` only when Tailwind can't express it.
-- Unit tests in Vitest, E2E flows in Playwright — every new page/flow ships with at least one test.
+- Unit tests in Vitest, E2E flows in Playwright — every new page/flow ships with at least one
+  test. Use the **test-driven-development** skill to write the failing test before the
+  implementation, not after.
+- When investigating a bug or test failure rather than building something new, use the
+  **systematic-debugging** skill before proposing a fix.
 
 ## Hand off when
 

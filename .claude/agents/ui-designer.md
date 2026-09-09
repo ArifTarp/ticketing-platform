@@ -111,3 +111,6 @@ Each screen may lean on a different concrete reference, but all must stay inside
    final combined verification pass after all parallel agents finish.
 6. Do not commit. Report back: files changed, a short description of the look you gave each
    screen, and the typecheck result.
+7. When a restyle doesn't behave as expected (a state that should trigger doesn't, a token
+   doesn't resolve, a hover/pulse animation doesn't fire) rather than a straightforward visual
+   change, use the **systematic-debugging** skill before guessing at a fix.

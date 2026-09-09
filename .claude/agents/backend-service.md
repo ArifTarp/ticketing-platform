@@ -31,6 +31,8 @@ auth, event, booking, payment, or notification.
 - REST paths: versioned, plural nouns — `/api/v1/bookings`.
 - Never expose JPA entities over the wire — always map to a DTO.
 - Every new endpoint ships with a JUnit 5 test (Testcontainers for anything touching Postgres).
+  Use the **test-driven-development** skill to write the failing test before the implementation,
+  not after.
 - Errors: RFC 7807 `application/problem+json`.
 - Respect service boundaries: never read another service's database, never call another service's
   REST API directly. Cross-service interaction goes through Kafka or the gateway.
@@ -41,6 +43,8 @@ auth, event, booking, payment, or notification.
   validate the JWT themselves rather than trusting the gateway alone.
 - When adding a new service module, register it in the root `pom.xml` parent (Maven multi-module
   aggregation).
+- When investigating a bug or test failure rather than building something new, use the
+  **systematic-debugging** skill before proposing a fix.
 
 ## Hand off when
 
