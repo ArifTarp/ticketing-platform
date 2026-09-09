@@ -9,7 +9,7 @@ spring:
       globalcors:
         cors-configurations:
           '[/**]':
-            allowedOrigins: "http://localhost:3000"
+            allowedOrigins: "${app.cors.allowed-origin}"
             allowedMethods: "*"
             allowedHeaders: "*"
             allowCredentials: true
@@ -109,6 +109,14 @@ spring:
                   maxBackoff: 200ms
                   factor: 2
                   basedOnPreviousValue: false
+
+# The frontend origin allowed to make cross-origin requests. Read by both the globalcors block
+# above (for normal proxied responses) and ProblemDetailResponseWriter (for the 401/403/503
+# responses Spring Security's reactive handlers write directly, bypassing globalcors) — one
+# property, not two independent literals, so the two can't drift out of sync.
+app:
+  cors:
+    allowed-origin: ${CORS_ALLOWED_ORIGIN:http://localhost:3000}
 
 # Downstream service locations. Externalized so tests can point them at a stub and Docker Compose
 # can point them at container hostnames without touching this file.

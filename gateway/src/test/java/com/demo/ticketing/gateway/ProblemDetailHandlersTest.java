@@ -23,7 +23,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ProblemDetailHandlersTest {
 
-    private final ProblemDetailResponseWriter writer = new ProblemDetailResponseWriter(new ObjectMapper());
+    private final ProblemDetailResponseWriter writer =
+            new ProblemDetailResponseWriter(new ObjectMapper(), "http://localhost:3000");
 
     @Test
     void authenticationFailureIsWrittenAsProblemJson401() {
