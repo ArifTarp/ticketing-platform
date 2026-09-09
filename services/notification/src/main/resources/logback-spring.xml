@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Structured JSON console logging (root CLAUDE.md: "Structured JSON logs everywhere").
+
+  This mirrors Spring Boot's own base.xml/console-appender.xml (see
+  org/springframework/boot/logging/logback/*.xml inside spring-boot-3.3.6.jar) but swaps the
+  plain-text pattern encoder for LogstashEncoder so every line is one JSON object. Levels/behavior
+  are otherwise untouched: `defaults.xml` still supplies the standard property defaults
+  (CONSOLE_LOG_THRESHOLD etc.), the root level below is the same Boot default (INFO), and
+  `logging.level.*` in application.yml still overrides per-logger levels exactly as before — Boot's
+  LoggingSystem applies those programmatically after this file loads, independent of what's
+  written here.
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- Same value as `spring.application.name` in application.yml, so log lines are
+         self-identifying once shipped to a shared Elastic index. -->
+    <springProperty scope="context" name="serviceName" source="spring.application.name"
+                     defaultValue="notification-service"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>${CONSOLE_LOG_THRESHOLD}</level>
+        </filter>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <!-- timestamp, level, logger_name, thread_name, message are LogstashEncoder defaults. -->
+            <!-- Copies every MDC entry (e.g. trace_id/span_id once the OTel MDC instrumentation
+                 lands) onto each line; simply absent when no MDC context is set. -->
+            <includeMdc>true</includeMdc>
+            <!-- service.name follows the OTel/Elastic Common Schema convention; "service" is kept
+                 too as a short, easy-to-filter-on alias in Kibana. -->
+            <customFields>{"service.name":"${serviceName}","service":"${serviceName}"}</customFields>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

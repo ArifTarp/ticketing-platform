@@ -84,8 +84,11 @@ services:
   # own application.yml keeps localhost defaults for running it directly via Maven).
   booking:
     build:
-      context: ./services/booking
-      dockerfile: Dockerfile
+      # Context is the repo root, not services/booking/, because this is a multi-module Maven
+      # build and booking depends on the sibling `messaging` module — see the Dockerfile's own
+      # header comment for the full rationale.
+      context: .
+      dockerfile: services/booking/Dockerfile
     container_name: ticketing-booking
     ports:
       - "8083:8083"
@@ -96,12 +99,25 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # OpenTelemetry Java agent (bundled into the image, see Dockerfile) -> Elastic APM Server's
+      # native OTLP/HTTP ingest endpoint on port 8200. Traces + metrics only for this demo (logs
+      # stay as structured JSON on stdout, not double-shipped via OTel) — see root CLAUDE.md's
+      # observability entry and this compose file's elasticsearch/kibana/apm-server blocks below.
+      OTEL_SERVICE_NAME: booking
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=ticketing-platform,deployment.environment=local
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
+      OTEL_INSTRUMENTATION_LOGBACK_MDC_ENABLED: "true"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      apm-server:
         condition: service_healthy
 
   # Phase 8: mock payment provider. Kafka-only — no inbound REST, so no port is published for
@@ -110,8 +126,10 @@ services:
   # exists for local debugging/actuator access, not for gateway routing.
   payment:
     build:
-      context: ./services/payment
-      dockerfile: Dockerfile
+      # Context is the repo root, not services/payment/ — see the booking block above / the
+      # Dockerfile's own header comment for the multi-module Maven build rationale.
+      context: .
+      dockerfile: services/payment/Dockerfile
     container_name: ticketing-payment
     ports:
       - "8084:8084"
@@ -120,10 +138,20 @@ services:
       SPRING_DATASOURCE_USERNAME: payment_app
       SPRING_DATASOURCE_PASSWORD: payment_app_pw
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # See the booking block's comment above for what these do.
+      OTEL_SERVICE_NAME: payment
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=ticketing-platform,deployment.environment=local
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
+      OTEL_INSTRUMENTATION_LOGBACK_MDC_ENABLED: "true"
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      apm-server:
         condition: service_healthy
 
   # Phase 9: pure booking.events consumer (notification "sends" mock mail/SMS). Kafka-only — no
@@ -131,8 +159,10 @@ services:
   # either, unlike booking. Mirrors the payment block's build/env/depends_on style.
   notification:
     build:
-      context: ./services/notification
-      dockerfile: Dockerfile
+      # Context is the repo root, not services/notification/ — see the booking block above / the
+      # Dockerfile's own header comment for the multi-module Maven build rationale.
+      context: .
+      dockerfile: services/notification/Dockerfile
     container_name: ticketing-notification
     ports:
       - "8085:8085"
@@ -141,11 +171,92 @@ services:
       SPRING_DATASOURCE_USERNAME: notification_app
       SPRING_DATASOURCE_PASSWORD: notification_app_pw
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # See the booking block's comment above for what these do.
+      OTEL_SERVICE_NAME: notification
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=ticketing-platform,deployment.environment=local
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
+      OTEL_INSTRUMENTATION_LOGBACK_MDC_ENABLED: "true"
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      apm-server:
+        condition: service_healthy
+
+  # --- Observability stack: OpenTelemetry traces/metrics -> Elastic APM Server -> Elasticsearch,
+  # visualized in Kibana. Single-node, security/TLS disabled — local demo only, per root
+  # CLAUDE.md's observability entry. Do not reuse this config as a template for anything
+  # internet-facing.
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.1.10
+    container_name: ticketing-elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      xpack.security.http.ssl.enabled: "false"
+      xpack.security.transport.ssl.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:9.1.10
+    container_name: ticketing-kibana
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:5601/api/status | grep -q '\"level\":\"available\"'"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  # Elastic APM Server: exposes a native OTLP gRPC+HTTP ingest endpoint on the same port (8200) as
+  # its classic intake API (protocol-detected per request — no separate OTel Collector needed),
+  # and ships everything it receives to elasticsearch. See services/booking|payment|notification's
+  # OTEL_EXPORTER_OTLP_ENDPOINT env vars above, which point straight at this service.
+  apm-server:
+    image: docker.elastic.co/apm/apm-server:9.1.10
+    container_name: ticketing-apm-server
+    # -e: log to stderr instead of a file, standard for running in a container.
+    # strict.perms=false: default apm-server.yml ownership checks assume a bare-metal install;
+    # skip them here rather than fighting file-permission bits inside the image.
+    command: >
+      -e
+      -E output.elasticsearch.hosts=["elasticsearch:9200"]
+      -E apm-server.host=0.0.0.0:8200
+      -E strict.perms=false
+    ports:
+      - "8200:8200"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    # No curl/wget in this image (RHEL UBI minimal + coreutils only) — use bash's /dev/tcp to
+    # confirm the OTLP/intake HTTP port is actually accepting connections.
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8200"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
 
 volumes:
   postgres-data:
+  elasticsearch-data:

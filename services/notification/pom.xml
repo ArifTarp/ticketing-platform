@@ -77,6 +77,16 @@
       <groupId>org.springframework.kafka</groupId>
       <artifactId>spring-kafka</artifactId>
     </dependency>
+    <!-- Structured JSON console logs (root CLAUDE.md: "Structured JSON logs everywhere"), consumed
+         by the Elastic/Kibana log stack. 7.4 is the last line explicitly compatible across
+         Logback 1.2/1.3/1.4/1.5.x without a hard floor above our managed 1.5.12 (Spring Boot
+         3.3.6 BOM), so it avoids a NoSuchMethodError risk that newer 8.x releases (which require
+         logback-classic >= 1.5.13) could hit. -->
+    <dependency>
+      <groupId>net.logstash.logback</groupId>
+      <artifactId>logstash-logback-encoder</artifactId>
+      <version>7.4</version>
+    </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>

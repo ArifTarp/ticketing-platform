@@ -1,0 +1,12 @@
+# Keeps the docker build context (repo root, required for the multi-module Maven builds in
+# services/booking, services/payment, services/notification's Dockerfiles) small and avoids
+# invalidating layer caches with unrelated churn.
+**/target/
+**/node_modules/
+**/.next/
+**/out/
+**/.pnpm-store/
+.git/
+.idea/
+.vscode/
+frontend/

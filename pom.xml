@@ -86,6 +86,22 @@
           <groupId>org.springframework.boot</groupId>
           <artifactId>spring-boot-maven-plugin</artifactId>
           <version>${spring-boot.version}</version>
+          <!-- spring-boot-starter-parent normally binds the "repackage" goal to the package
+               phase for free; since this repo uses its own plain aggregator parent instead (see
+               the maven.compiler.parameters comment above), that binding doesn't happen
+               automatically. Without this, `mvn package` produces a thin, non-executable jar
+               (fine for `mvn spring-boot:run`, which invokes the plugin's run goal directly, but
+               broken for any Dockerfile that does `java -jar target/*.jar` against a `package`
+               build — found while wiring OpenTelemetry into the booking/payment/notification
+               Dockerfiles). -->
+          <executions>
+            <execution>
+              <id>repackage</id>
+              <goals>
+                <goal>repackage</goal>
+              </goals>
+            </execution>
+          </executions>
         </plugin>
       </plugins>
     </pluginManagement>
