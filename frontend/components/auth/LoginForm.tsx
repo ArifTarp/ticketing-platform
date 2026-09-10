@@ -6,12 +6,14 @@ import Link from "next/link";
 import { useAuth } from "@/context/SessionProvider";
 import { loginUser } from "@/lib/authApi";
 import { ApiRequestError } from "@/lib/apiClient";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 import { FormError } from "@/components/common/FormError";
 import { PasswordInput } from "./PasswordInput";
 
 export function LoginForm() {
   const router = useRouter();
   const { login } = useAuth();
+  const { t } = useLocale();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -30,11 +32,11 @@ export function LoginForm() {
       router.push("/events");
     } catch (err) {
       if (err instanceof ApiRequestError && err.status === 401) {
-        setError("Invalid email or password.");
+        setError(t("auth.login.invalidCredentials"));
       } else if (err instanceof ApiRequestError) {
         setError(err.detail);
       } else {
-        setError("Something went wrong. Please try again.");
+        setError(t("common.somethingWentWrong"));
       }
       setPassword("");
       setIsSubmitting(false);
@@ -45,14 +47,14 @@ export function LoginForm() {
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div>
         <h1 className="font-[family-name:var(--font-display)] text-lg font-semibold text-[var(--text-primary)]">
-          Log in
+          {t("auth.login.title")}
         </h1>
-        <p className="label-mono mt-1">Access panel</p>
+        <p className="label-mono mt-1">{t("auth.login.subtitle")}</p>
       </div>
 
       <div className="flex flex-col gap-1">
         <label htmlFor="login-email" className="label-mono">
-          Email
+          {t("auth.login.email")}
         </label>
         <input
           id="login-email"
@@ -67,7 +69,7 @@ export function LoginForm() {
 
       <div className="flex flex-col gap-1">
         <label htmlFor="login-password" className="label-mono">
-          Password
+          {t("auth.login.password")}
         </label>
         <PasswordInput
           id="login-password"
@@ -81,13 +83,13 @@ export function LoginForm() {
       <FormError message={error} />
 
       <button type="submit" disabled={isSubmitDisabled} className="btn btn-primary w-full">
-        {isSubmitting ? "Logging in…" : "Log in"}
+        {isSubmitting ? t("auth.login.submitting") : t("auth.login.submit")}
       </button>
 
       <p className="text-center text-sm text-[var(--text-muted)]">
-        Don&apos;t have an account?{" "}
+        {t("auth.login.noAccount")}{" "}
         <Link href="/register" className="font-medium text-[var(--accent)] hover:text-[var(--accent-strong)]">
-          Register instead
+          {t("auth.login.registerInstead")}
         </Link>
       </p>
     </form>

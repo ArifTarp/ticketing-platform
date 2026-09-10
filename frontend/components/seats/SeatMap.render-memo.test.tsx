@@ -4,6 +4,7 @@ import { act } from "react";
 import { SeatMap } from "./SeatMap";
 import { Seat } from "./Seat";
 import type { SeatDto } from "@/types/event";
+import { LocaleProvider } from "@/lib/i18n/LocaleContext";
 
 // `Seat` is a `memo(...)` component object shaped `{ type: InnerFn, compare, $$typeof }`.
 // Monkey-patching `.type` lets us count how many times the *inner* render function actually runs
@@ -42,12 +43,14 @@ describe("SeatMap render cost (scratch measurement backing the perf-review findi
 
     function Harness({ selectedSeatIds }: { selectedSeatIds: Set<number> }) {
       return (
-        <SeatMap
-          seats={seats}
-          availabilityBySeatId={stableAvailabilityMap}
-          selectedSeatIds={selectedSeatIds}
-          onToggleSeat={stableOnToggleSeat}
-        />
+        <LocaleProvider>
+          <SeatMap
+            seats={seats}
+            availabilityBySeatId={stableAvailabilityMap}
+            selectedSeatIds={selectedSeatIds}
+            onToggleSeat={stableOnToggleSeat}
+          />
+        </LocaleProvider>
       );
     }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { fetchAdminEvents } from "@/lib/adminApi";
+import { deleteEvent, fetchAdminEvents } from "@/lib/adminApi";
 import { ApiRequestError } from "@/lib/apiClient";
 import { formatEventDate } from "@/lib/formatDate";
 import type { EventSummaryResponse } from "@/types/event";
@@ -26,6 +26,8 @@ export function EventTable({ reloadToken, onEdit }: EventTableProps) {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [retryToken, setRetryToken] = useState(0);
+  const [deletingEventId, setDeletingEventId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const loadEvents = useCallback(async () => {
     setIsLoading(true);
@@ -44,6 +46,22 @@ export function EventTable({ reloadToken, onEdit }: EventTableProps) {
   useEffect(() => {
     loadEvents();
   }, [loadEvents, reloadToken, retryToken]);
+
+  async function handleDelete(event: EventSummaryResponse) {
+    if (!window.confirm(`Delete "${event.title}"? This can't be undone.`)) {
+      return;
+    }
+    setDeleteError(null);
+    setDeletingEventId(event.id);
+    try {
+      await deleteEvent(event.id);
+      setEvents((prev) => (prev ? prev.filter((e) => e.id !== event.id) : prev));
+    } catch (err) {
+      setDeleteError(err instanceof ApiRequestError ? err.detail : "Failed to delete this event.");
+    } finally {
+      setDeletingEventId(null);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -74,43 +92,67 @@ export function EventTable({ reloadToken, onEdit }: EventTableProps) {
   }
 
   return (
-    <div className="panel overflow-hidden">
-      <table className="w-full text-left text-sm">
-        <thead className="border-b border-[var(--border)]">
-          <tr>
-            <th className="label-mono px-4 py-3 font-medium">Title</th>
-            <th className="label-mono px-4 py-3 font-medium">Venue</th>
-            <th className="label-mono px-4 py-3 font-medium">Starts at</th>
-            <th className="label-mono px-4 py-3 font-medium">Status</th>
-            <th className="label-mono px-4 py-3 font-medium">
-              <span className="sr-only">Actions</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-[var(--border)]">
-          {events.map((event) => (
-            <tr key={event.id} className="transition-colors hover:bg-[var(--surface-hover)]">
-              <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{event.title}</td>
-              <td className="px-4 py-3 text-[var(--text-secondary)]">{event.venueName}</td>
-              <td className="value-mono px-4 py-3 text-[var(--text-secondary)]">
-                {formatEventDate(event.startsAt)}
-              </td>
-              <td className="px-4 py-3">
-                <EventStatusBadge status={event.status} />
-              </td>
-              <td className="px-4 py-3 text-right">
-                <button
-                  type="button"
-                  onClick={() => onEdit(event)}
-                  className="label-mono text-[var(--text-secondary)] hover:text-[var(--accent)]"
-                >
-                  Edit
-                </button>
-              </td>
+    <div className="flex flex-col gap-2">
+      {deleteError && (
+        <p
+          className="rounded-[var(--radius-sm)] border px-3 py-2 text-sm"
+          style={{
+            borderColor: "var(--status-danger)",
+            backgroundColor: "var(--status-danger-soft)",
+            color: "var(--status-danger)",
+          }}
+        >
+          {deleteError}
+        </p>
+      )}
+      <div className="panel overflow-hidden">
+        <table className="w-full text-left text-sm">
+          <thead className="border-b border-[var(--border)]">
+            <tr>
+              <th className="label-mono px-4 py-3 font-medium">Title</th>
+              <th className="label-mono px-4 py-3 font-medium">Venue</th>
+              <th className="label-mono px-4 py-3 font-medium">Starts at</th>
+              <th className="label-mono px-4 py-3 font-medium">Status</th>
+              <th className="label-mono px-4 py-3 font-medium">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-[var(--border)]">
+            {events.map((event) => (
+              <tr key={event.id} className="transition-colors hover:bg-[var(--surface-hover)]">
+                <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{event.title}</td>
+                <td className="px-4 py-3 text-[var(--text-secondary)]">{event.venueName}</td>
+                <td className="value-mono px-4 py-3 text-[var(--text-secondary)]">
+                  {formatEventDate(event.startsAt)}
+                </td>
+                <td className="px-4 py-3">
+                  <EventStatusBadge status={event.status} />
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => onEdit(event)}
+                      className="label-mono text-[var(--text-secondary)] hover:text-[var(--accent)]"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(event)}
+                      disabled={deletingEventId === event.id}
+                      className="label-mono text-[var(--text-secondary)] hover:text-[var(--status-danger)] disabled:opacity-50"
+                    >
+                      {deletingEventId === event.id ? "Deleting…" : "Delete"}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

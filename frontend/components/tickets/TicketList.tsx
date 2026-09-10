@@ -11,11 +11,13 @@ import type { EventResponse } from "@/types/event";
 import { EmptyState } from "@/components/common/EmptyState";
 import { TicketCard } from "./TicketCard";
 import { TicketCardSkeleton } from "./TicketCardSkeleton";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 
 const SKELETON_COUNT = 3;
 
 /** Fetch + list container for screen 7 — only CONFIRMED bookings, each merged with its event. */
 export function TicketList() {
+  const { t } = useLocale();
   const { user } = useAuth();
   const [bookings, setBookings] = useState<BookingResponse[] | null>(null);
   const [events, setEvents] = useState<Record<number, EventResponse | null>>({});
@@ -38,10 +40,11 @@ export function TicketList() {
       });
     } catch (err) {
       setBookings(null);
-      setError(err instanceof ApiRequestError ? err.detail : "Failed to load your tickets.");
+      setError(err instanceof ApiRequestError ? err.detail : t("tickets.couldntLoad"));
     } finally {
       setIsLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -62,7 +65,7 @@ export function TicketList() {
   if (error) {
     return (
       <EmptyState
-        title="Couldn't load your tickets"
+        title={t("tickets.couldntLoad")}
         description={error}
         action={
           <button
@@ -70,7 +73,7 @@ export function TicketList() {
             onClick={() => setReloadToken((prev) => prev + 1)}
             className="btn btn-primary"
           >
-            Retry
+            {t("common.retry")}
           </button>
         }
       />
@@ -80,11 +83,11 @@ export function TicketList() {
   if (!bookings || bookings.length === 0) {
     return (
       <EmptyState
-        title="No tickets yet"
-        description="Browse events to book your first seats."
+        title={t("tickets.emptyTitle")}
+        description={t("tickets.emptyDescription")}
         action={
           <Link href="/events" className="btn btn-primary">
-            Browse events
+            {t("tickets.browseEvents")}
           </Link>
         }
       />

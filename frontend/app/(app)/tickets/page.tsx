@@ -4,9 +4,11 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/SessionProvider";
 import { TicketList } from "@/components/tickets/TicketList";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 
 export default function TicketsPage() {
   const router = useRouter();
+  const { t } = useLocale();
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
 
   useEffect(() => {
@@ -25,7 +27,7 @@ export default function TicketsPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold text-[var(--text-primary)]">
-        My tickets
+        {t("tickets.pageTitle")}
       </h1>
       <TicketList />
     </div>

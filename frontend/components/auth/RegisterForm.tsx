@@ -6,12 +6,14 @@ import Link from "next/link";
 import { useAuth } from "@/context/SessionProvider";
 import { registerUser } from "@/lib/authApi";
 import { ApiRequestError } from "@/lib/apiClient";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 import { FormError } from "@/components/common/FormError";
 import { PasswordInput } from "./PasswordInput";
 
 export function RegisterForm() {
   const router = useRouter();
   const { login } = useAuth();
+  const { t } = useLocale();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -27,7 +29,7 @@ export function RegisterForm() {
     setError(null);
 
     if (!passwordsMatch) {
-      setError("Passwords do not match.");
+      setError(t("auth.register.passwordsMismatch"));
       return;
     }
 
@@ -38,11 +40,11 @@ export function RegisterForm() {
       router.push("/events");
     } catch (err) {
       if (err instanceof ApiRequestError && err.status === 409) {
-        setError("An account with this email already exists.");
+        setError(t("auth.register.emailTaken"));
       } else if (err instanceof ApiRequestError) {
         setError(err.detail);
       } else {
-        setError("Something went wrong. Please try again.");
+        setError(t("common.somethingWentWrong"));
       }
       setIsSubmitting(false);
     }
@@ -52,14 +54,14 @@ export function RegisterForm() {
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div>
         <h1 className="font-[family-name:var(--font-display)] text-lg font-semibold text-[var(--text-primary)]">
-          Create an account
+          {t("auth.register.title")}
         </h1>
-        <p className="label-mono mt-1">New access credentials</p>
+        <p className="label-mono mt-1">{t("auth.register.subtitle")}</p>
       </div>
 
       <div className="flex flex-col gap-1">
         <label htmlFor="register-email" className="label-mono">
-          Email
+          {t("auth.register.email")}
         </label>
         <input
           id="register-email"
@@ -74,7 +76,7 @@ export function RegisterForm() {
 
       <div className="flex flex-col gap-1">
         <label htmlFor="register-password" className="label-mono">
-          Password
+          {t("auth.register.password")}
         </label>
         <PasswordInput
           id="register-password"
@@ -87,7 +89,7 @@ export function RegisterForm() {
 
       <div className="flex flex-col gap-1">
         <label htmlFor="register-confirm-password" className="label-mono">
-          Confirm password
+          {t("auth.register.confirmPassword")}
         </label>
         <PasswordInput
           id="register-confirm-password"
@@ -101,13 +103,13 @@ export function RegisterForm() {
       <FormError message={error} />
 
       <button type="submit" disabled={isSubmitDisabled} className="btn btn-primary w-full">
-        {isSubmitting ? "Creating account…" : "Create account"}
+        {isSubmitting ? t("auth.register.submitting") : t("auth.register.submit")}
       </button>
 
       <p className="text-center text-sm text-[var(--text-muted)]">
-        Already have an account?{" "}
+        {t("auth.register.haveAccount")}{" "}
         <Link href="/login" className="font-medium text-[var(--accent)] hover:text-[var(--accent-strong)]">
-          Log in instead
+          {t("auth.register.loginInstead")}
         </Link>
       </p>
     </form>

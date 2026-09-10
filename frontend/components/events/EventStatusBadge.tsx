@@ -1,4 +1,5 @@
 import type { EventStatus } from "@/types/event";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 
 const STATUS_COLOR: Record<EventStatus, string> = {
   DRAFT: "var(--status-neutral)",
@@ -14,19 +15,14 @@ const STATUS_SOFT: Record<EventStatus, string> = {
   CLOSED: "var(--status-danger-soft)",
 };
 
-const STATUS_LABELS: Record<EventStatus, string> = {
-  DRAFT: "Draft",
-  ON_SALE: "Live",
-  SOLD_OUT: "Sold out",
-  CLOSED: "Closed",
-};
-
 interface EventStatusBadgeProps {
   status: EventStatus;
 }
 
 /** Visual badge mirroring the event status lifecycle exactly (DRAFT -> ON_SALE -> SOLD_OUT|CLOSED). */
 export function EventStatusBadge({ status }: EventStatusBadgeProps) {
+  const { t } = useLocale();
+
   return (
     <span
       className="label-mono inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1"
@@ -37,7 +33,7 @@ export function EventStatusBadge({ status }: EventStatusBadgeProps) {
         style={{ backgroundColor: STATUS_COLOR[status] }}
         aria-hidden
       />
-      {STATUS_LABELS[status]}
+      {t(`events.status.${status}`)}
     </span>
   );
 }

@@ -9,6 +9,12 @@ import { test, expect } from "@playwright/test";
 
 const PUBLIC_ROUTES = ["/login", "/register", "/events"];
 
+// This spec's assertions match English UI copy (e.g. "Log in"); the app now defaults to "tr"
+// (Turkish-market demo, lib/i18n/LocaleContext.tsx) — force "en" for every navigation here.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("ticketing_locale", "en"));
+});
+
 for (const route of PUBLIC_ROUTES) {
   test(`${route} renders on the dark control-panel theme with no console errors`, async ({
     page,

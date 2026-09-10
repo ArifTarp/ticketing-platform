@@ -7,6 +7,7 @@ import type {
   EventResponse,
   EventSummaryResponse,
   SeatCategoryDto,
+  UpdateEventRequest,
   VenueDto,
 } from "@/types/event";
 
@@ -44,6 +45,24 @@ export function createEvent(request: CreateEventRequest): Promise<EventResponse>
   return apiFetch<EventResponse>("/api/v1/events", {
     method: "POST",
     body: request,
+  });
+}
+
+/** PUT /api/v1/events/{eventId} — ADMIN-only. Returns the updated event resource. */
+export function updateEvent(
+  eventId: string | number,
+  request: UpdateEventRequest,
+): Promise<EventResponse> {
+  return apiFetch<EventResponse>(`/api/v1/events/${eventId}`, {
+    method: "PUT",
+    body: request,
+  });
+}
+
+/** DELETE /api/v1/events/{eventId} — ADMIN-only. 204 on success, 404 if not found. */
+export function deleteEvent(eventId: string | number): Promise<void> {
+  return apiFetch<void>(`/api/v1/events/${eventId}`, {
+    method: "DELETE",
   });
 }
 

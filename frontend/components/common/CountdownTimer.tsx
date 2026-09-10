@@ -1,4 +1,5 @@
 import { useCountdown } from "@/hooks/useCountdown";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 
 interface CountdownTimerProps {
   /** ISO instant the hold expires at, or null when no hold is active yet. */
@@ -7,6 +8,7 @@ interface CountdownTimerProps {
 
 /** Shared mm:ss hold-TTL countdown for screens 4 (seat selection) and 5 (checkout). */
 export function CountdownTimer({ expiresAt }: CountdownTimerProps) {
+  const { t } = useLocale();
   const { label, isExpiring, isExpired } = useCountdown(expiresAt);
 
   if (!expiresAt) {
@@ -30,7 +32,7 @@ export function CountdownTimer({ expiresAt }: CountdownTimerProps) {
         style={{ backgroundColor: toneVars.color }}
         aria-hidden
       />
-      {isExpired ? "Hold expired" : `Hold expires in ${label}`}
+      {isExpired ? t("seats.countdown.expired") : t("seats.countdown.expiresIn", { label })}
     </div>
   );
 }

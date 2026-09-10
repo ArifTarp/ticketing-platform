@@ -1,0 +1,156 @@
+{
+  "nav": {
+    "brand": "Ticketing",
+    "events": "Events",
+    "myTickets": "My tickets",
+    "admin": "Admin",
+    "logIn": "Log in",
+    "logOut": "Log out"
+  },
+  "common": {
+    "retry": "Retry",
+    "somethingWentWrong": "Something went wrong. Please try again."
+  },
+  "events": {
+    "pageTitle": "Upcoming events",
+    "fromPrice": "From {price}",
+    "pricingTba": "Pricing TBA",
+    "couldntLoad": "Couldn't load events",
+    "noneFound": "No events found",
+    "tryDifferentFilters": "Try different filters.",
+    "filter": {
+      "city": "City",
+      "cityPlaceholder": "Any city",
+      "from": "From",
+      "to": "To",
+      "search": "Search",
+      "searchPlaceholder": "Search events…"
+    },
+    "status": {
+      "DRAFT": "Draft",
+      "ON_SALE": "Live",
+      "SOLD_OUT": "Sold out",
+      "CLOSED": "Closed"
+    }
+  },
+  "eventDetail": {
+    "notFoundTitle": "Event not found",
+    "notFoundDescription": "The event you're looking for doesn't exist or was removed.",
+    "backToEvents": "Back to events",
+    "couldntLoad": "Couldn't load this event",
+    "pricingUnannounced": "Pricing not announced yet.",
+    "selectSeats": "Select seats",
+    "reason": {
+      "soldOut": "This event is sold out.",
+      "closed": "Ticket sales are closed for this event.",
+      "started": "This event has already started.",
+      "notOnSale": "This event is not on sale yet."
+    }
+  },
+  "seats": {
+    "pageTitle": "Select your seats",
+    "stage": "Stage",
+    "section": "Section {name}",
+    "couldntLoad": "Couldn't load the seat map",
+    "backToEvent": "Back to event",
+    "failedToStartCheckout": "Failed to start checkout.",
+    "legend": {
+      "available": "Available",
+      "selected": "Selected",
+      "held": "Held",
+      "sold": "Sold"
+    },
+    "summary": {
+      "title": "Your selection",
+      "prompt": "Click a seat to select it (up to 6).",
+      "maxReached": "Max 6 seats per booking.",
+      "total": "Total",
+      "holding": "Holding…",
+      "holdSelected": "Hold selected seats",
+      "proceeding": "Proceeding…",
+      "proceedToPayment": "Proceed to payment"
+    },
+    "holdExpired": {
+      "title": "Your hold expired",
+      "description": "You didn't complete checkout within the 10-minute hold window, so your selected seats were released. Pick your seats again to continue.",
+      "cta": "Select seats again"
+    },
+    "raceConflictSuffix": "Please choose a different seat.",
+    "countdown": {
+      "expired": "Hold expired",
+      "expiresIn": "Hold expires in {label}"
+    }
+  },
+  "checkout": {
+    "title": "Checkout",
+    "bookingNotFound": "Booking not found",
+    "couldntLoad": "Couldn't load this booking",
+    "takingLonger": "This is taking longer than expected. Refresh the page to check the latest status.",
+    "failedToStartCheckout": "Failed to start checkout.",
+    "paymentDetails": "Payment details",
+    "cardNumber": "Card number",
+    "expiry": "Expiry",
+    "cvc": "CVC",
+    "payNow": "Pay now",
+    "cardNumberInvalid": "Enter a valid 16-digit card number.",
+    "expiryInvalid": "Enter expiry as MM/YY.",
+    "cvcInvalid": "Enter a valid CVC.",
+    "processing": "Confirming your payment…",
+    "processingHint": "This can take a few seconds.",
+    "bookingSummary": "Booking summary",
+    "seat": "Seat #{id}",
+    "total": "Total"
+  },
+  "confirm": {
+    "couldntLoad": "Couldn't load this booking",
+    "confirmedBadge": "Confirmed",
+    "bookingConfirmed": "Booking confirmed",
+    "totalLabel": "Total: {price}",
+    "viewMyTickets": "View my tickets",
+    "expiredBadge": "Expired",
+    "cancelledBadge": "Cancelled",
+    "notCompleted": "Booking not completed",
+    "reasonExpired": "Your hold expired before payment completed.",
+    "reasonFailed": "Payment could not be completed.",
+    "tryAgain": "Try again"
+  },
+  "tickets": {
+    "pageTitle": "My tickets",
+    "booking": "Booking",
+    "confirmedBadge": "Confirmed",
+    "eventFallback": "Event #{id}",
+    "seat": "Seat #{id}",
+    "totalLabel": "Total: {price}",
+    "bookingHash": "Booking #{id}",
+    "couldntLoad": "Couldn't load your tickets",
+    "emptyTitle": "No tickets yet",
+    "emptyDescription": "Browse events to book your first seats.",
+    "browseEvents": "Browse events"
+  },
+  "auth": {
+    "login": {
+      "title": "Log in",
+      "subtitle": "Access panel",
+      "email": "Email",
+      "password": "Password",
+      "submitting": "Logging in…",
+      "submit": "Log in",
+      "noAccount": "Don't have an account?",
+      "registerInstead": "Register instead",
+      "invalidCredentials": "Invalid email or password."
+    },
+    "register": {
+      "title": "Create an account",
+      "subtitle": "New access credentials",
+      "email": "Email",
+      "password": "Password",
+      "confirmPassword": "Confirm password",
+      "submitting": "Creating account…",
+      "submit": "Create account",
+      "haveAccount": "Already have an account?",
+      "loginInstead": "Log in instead",
+      "passwordsMismatch": "Passwords do not match.",
+      "emailTaken": "An account with this email already exists."
+    }
+  }
+}

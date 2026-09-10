@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { createEvent, createSeatCategories } from "@/lib/adminApi";
+import { createEvent, createSeatCategories, updateEvent } from "@/lib/adminApi";
 import { fetchEvent } from "@/lib/eventApi";
 import { ApiRequestError } from "@/lib/apiClient";
 import type { CreateSeatCategoryRequest, EventStatus, SeatCategoryDto, VenueDto } from "@/types/event";
@@ -28,19 +28,16 @@ interface EventFormProps {
 
 /**
  * Create/edit form (docs/user-flow.md screen 8): title, venue picker, description, starts-at,
- * status, and an embedded SeatCategoryList.
- *
- * Known limitation (edit mode): `services/event` exposes no `PUT`/`PATCH /api/v1/events/{id}` —
- * only `POST /api/v1/events` (create) and `POST /api/v1/events/{id}/seat-categories` (add new
- * tiers) exist. So in edit mode the event's own fields (title/description/starts-at/status) are
- * shown read-only and cannot be saved; the form still lets an admin add *additional* seat
- * categories to an existing event, since that part of the API genuinely supports it.
+ * status, image URL, and an embedded SeatCategoryList. In edit mode, saving PUTs the event's own
+ * fields via `updateEvent()` and (if any new rows were added) POSTs additional seat categories;
+ * the venue itself stays fixed once an event exists.
  */
 export function EventForm({ mode, eventId, venues, onVenueCreated, onClose, onSuccess }: EventFormProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startsAt, setStartsAt] = useState("");
   const [status, setStatus] = useState<EventStatus>("DRAFT");
+  const [imageUrl, setImageUrl] = useState("");
   const [selectedVenueId, setSelectedVenueId] = useState<number | null>(null);
   const [existingCategories, setExistingCategories] = useState<SeatCategoryDto[]>([]);
   const [rows, setRows] = useState<SeatCategoryRow[]>(
@@ -64,6 +61,7 @@ export function EventForm({ mode, eventId, venues, onVenueCreated, onClose, onSu
         setDescription(event.description ?? "");
         setStartsAt(toDatetimeLocalValue(event.startsAt));
         setStatus(event.status);
+        setImageUrl(event.imageUrl ?? "");
         setSelectedVenueId(event.venue.id);
         setExistingCategories(event.seatCategories);
         onVenueCreated(event.venue);
@@ -89,7 +87,11 @@ export function EventForm({ mode, eventId, venues, onVenueCreated, onClose, onSu
     startsAt !== "" &&
     validRows.length > 0 &&
     validRows.length === rows.length;
-  const isEditModeValid = mode === "edit" && rows.length > 0 && validRows.length === rows.length;
+  const isEditModeValid =
+    mode === "edit" &&
+    title.trim() !== "" &&
+    startsAt !== "" &&
+    validRows.length === rows.length;
   const isSaveDisabled = isSubmitting || isLoadingDetail || (!isCreateModeValid && !isEditModeValid);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -123,8 +125,17 @@ export function EventForm({ mode, eventId, venues, onVenueCreated, onClose, onSu
         if (requests.length > 0) {
           await createSeatCategories(targetEventId, requests);
         }
-      } else if (eventId !== null && requests.length > 0) {
-        await createSeatCategories(eventId, requests);
+      } else if (eventId !== null) {
+        await updateEvent(eventId, {
+          title: title.trim(),
+          description: description.trim(),
+          startsAt: new Date(startsAt).toISOString(),
+          status,
+          imageUrl: imageUrl.trim() === "" ? null : imageUrl.trim(),
+        });
+        if (requests.length > 0) {
+          await createSeatCategories(eventId, requests);
+        }
       }
 
       onSuccess();
@@ -141,7 +152,9 @@ export function EventForm({ mode, eventId, venues, onVenueCreated, onClose, onSu
     }
   }
 
-  const isFieldsDisabled = isSubmitting || isLoadingDetail || mode === "edit";
+  const isFieldsDisabled = isSubmitting || isLoadingDetail;
+  /** The venue is fixed once an event exists — there's no field to reassign it in edit mode. */
+  const isVenueFieldDisabled = isFieldsDisabled || mode === "edit";
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
@@ -157,20 +170,6 @@ export function EventForm({ mode, eventId, venues, onVenueCreated, onClose, onSu
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            {mode === "edit" && (
-              <p
-                className="rounded-[var(--radius-sm)] border px-3 py-2 text-sm"
-                style={{
-                  borderColor: "var(--status-pending)",
-                  backgroundColor: "var(--status-pending-soft)",
-                  color: "var(--status-pending)",
-                }}
-              >
-                Editing an existing event&apos;s details isn&apos;t supported yet — the event
-                service has no update endpoint. You can still add new seat categories below.
-              </p>
-            )}
-
             <label className="flex flex-col gap-1 text-sm text-[var(--text-secondary)]">
               <span className="label-mono">Title</span>
               <input
@@ -189,7 +188,7 @@ export function EventForm({ mode, eventId, venues, onVenueCreated, onClose, onSu
                 selectedVenueId={selectedVenueId}
                 onSelect={setSelectedVenueId}
                 onVenueCreated={onVenueCreated}
-                isDisabled={isFieldsDisabled}
+                isDisabled={isVenueFieldDisabled}
               />
             </label>
 
@@ -229,6 +228,18 @@ export function EventForm({ mode, eventId, venues, onVenueCreated, onClose, onSu
                   </option>
                 ))}
               </select>
+            </label>
+
+            <label className="flex flex-col gap-1 text-sm text-[var(--text-secondary)]">
+              <span className="label-mono">Image URL</span>
+              <input
+                type="text"
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                disabled={isFieldsDisabled}
+                placeholder="https://…"
+                className="input-field value-mono disabled:opacity-50"
+              />
             </label>
 
             <SeatCategoryList

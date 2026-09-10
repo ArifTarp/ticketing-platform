@@ -1,0 +1,156 @@
+{
+  "nav": {
+    "brand": "Ticketing",
+    "events": "Etkinlikler",
+    "myTickets": "Biletlerim",
+    "admin": "Yönetim",
+    "logIn": "Giriş yap",
+    "logOut": "Çıkış yap"
+  },
+  "common": {
+    "retry": "Tekrar dene",
+    "somethingWentWrong": "Bir şeyler ters gitti. Lütfen tekrar deneyin."
+  },
+  "events": {
+    "pageTitle": "Yaklaşan etkinlikler",
+    "fromPrice": "{price} başlayan fiyatlarla",
+    "pricingTba": "Fiyat yakında",
+    "couldntLoad": "Etkinlikler yüklenemedi",
+    "noneFound": "Etkinlik bulunamadı",
+    "tryDifferentFilters": "Farklı filtreler deneyin.",
+    "filter": {
+      "city": "Şehir",
+      "cityPlaceholder": "Tüm şehirler",
+      "from": "Başlangıç",
+      "to": "Bitiş",
+      "search": "Ara",
+      "searchPlaceholder": "Etkinlik ara…"
+    },
+    "status": {
+      "DRAFT": "Taslak",
+      "ON_SALE": "Satışta",
+      "SOLD_OUT": "Tükendi",
+      "CLOSED": "Kapandı"
+    }
+  },
+  "eventDetail": {
+    "notFoundTitle": "Etkinlik bulunamadı",
+    "notFoundDescription": "Aradığınız etkinlik mevcut değil veya kaldırıldı.",
+    "backToEvents": "Etkinliklere dön",
+    "couldntLoad": "Bu etkinlik yüklenemedi",
+    "pricingUnannounced": "Fiyatlar henüz açıklanmadı.",
+    "selectSeats": "Koltuk seç",
+    "reason": {
+      "soldOut": "Bu etkinliğin biletleri tükendi.",
+      "closed": "Bu etkinlik için bilet satışı kapandı.",
+      "started": "Bu etkinlik zaten başladı.",
+      "notOnSale": "Bu etkinlik henüz satışta değil."
+    }
+  },
+  "seats": {
+    "pageTitle": "Koltuklarınızı seçin",
+    "stage": "Sahne",
+    "section": "{name} Bölümü",
+    "couldntLoad": "Koltuk haritası yüklenemedi",
+    "backToEvent": "Etkinliğe dön",
+    "failedToStartCheckout": "Ödeme başlatılamadı.",
+    "legend": {
+      "available": "Müsait",
+      "selected": "Seçili",
+      "held": "Tutuluyor",
+      "sold": "Satıldı"
+    },
+    "summary": {
+      "title": "Seçiminiz",
+      "prompt": "Seçmek için bir koltuğa tıklayın (en fazla 6).",
+      "maxReached": "Rezervasyon başına en fazla 6 koltuk.",
+      "total": "Toplam",
+      "holding": "Tutuluyor…",
+      "holdSelected": "Seçili koltukları tut",
+      "proceeding": "Devam ediliyor…",
+      "proceedToPayment": "Ödemeye geç"
+    },
+    "holdExpired": {
+      "title": "Tutma süreniz doldu",
+      "description": "10 dakikalık tutma süresi içinde ödemeyi tamamlamadığınız için seçtiğiniz koltuklar serbest bırakıldı. Devam etmek için koltuklarınızı yeniden seçin.",
+      "cta": "Koltukları yeniden seç"
+    },
+    "raceConflictSuffix": "Lütfen başka bir koltuk seçin.",
+    "countdown": {
+      "expired": "Tutma süresi doldu",
+      "expiresIn": "Tutma süresi doluyor: {label}"
+    }
+  },
+  "checkout": {
+    "title": "Ödeme",
+    "bookingNotFound": "Rezervasyon bulunamadı",
+    "couldntLoad": "Bu rezervasyon yüklenemedi",
+    "takingLonger": "Bu beklenenden uzun sürüyor. En güncel durumu görmek için sayfayı yenileyin.",
+    "failedToStartCheckout": "Ödeme başlatılamadı.",
+    "paymentDetails": "Ödeme bilgileri",
+    "cardNumber": "Kart numarası",
+    "expiry": "Son kullanma tarihi",
+    "cvc": "CVC",
+    "payNow": "Şimdi öde",
+    "cardNumberInvalid": "Geçerli bir 16 haneli kart numarası girin.",
+    "expiryInvalid": "Son kullanma tarihini AA/YY olarak girin.",
+    "cvcInvalid": "Geçerli bir CVC girin.",
+    "processing": "Ödemeniz onaylanıyor…",
+    "processingHint": "Bu birkaç saniye sürebilir.",
+    "bookingSummary": "Rezervasyon özeti",
+    "seat": "Koltuk #{id}",
+    "total": "Toplam"
+  },
+  "confirm": {
+    "couldntLoad": "Bu rezervasyon yüklenemedi",
+    "confirmedBadge": "Onaylandı",
+    "bookingConfirmed": "Rezervasyon onaylandı",
+    "totalLabel": "Toplam: {price}",
+    "viewMyTickets": "Biletlerimi görüntüle",
+    "expiredBadge": "Süresi doldu",
+    "cancelledBadge": "İptal edildi",
+    "notCompleted": "Rezervasyon tamamlanamadı",
+    "reasonExpired": "Ödeme tamamlanmadan tutma süreniz doldu.",
+    "reasonFailed": "Ödeme tamamlanamadı.",
+    "tryAgain": "Tekrar dene"
+  },
+  "tickets": {
+    "pageTitle": "Biletlerim",
+    "booking": "Rezervasyon",
+    "confirmedBadge": "Onaylandı",
+    "eventFallback": "Etkinlik #{id}",
+    "seat": "Koltuk #{id}",
+    "totalLabel": "Toplam: {price}",
+    "bookingHash": "Rezervasyon #{id}",
+    "couldntLoad": "Biletleriniz yüklenemedi",
+    "emptyTitle": "Henüz bilet yok",
+    "emptyDescription": "İlk koltuklarınızı ayırtmak için etkinliklere göz atın.",
+    "browseEvents": "Etkinliklere göz at"
+  },
+  "auth": {
+    "login": {
+      "title": "Giriş yap",
+      "subtitle": "Erişim paneli",
+      "email": "E-posta",
+      "password": "Şifre",
+      "submitting": "Giriş yapılıyor…",
+      "submit": "Giriş yap",
+      "noAccount": "Hesabınız yok mu?",
+      "registerInstead": "Kayıt olun",
+      "invalidCredentials": "E-posta veya şifre hatalı."
+    },
+    "register": {
+      "title": "Hesap oluştur",
+      "subtitle": "Yeni erişim bilgileri",
+      "email": "E-posta",
+      "password": "Şifre",
+      "confirmPassword": "Şifreyi onayla",
+      "submitting": "Hesap oluşturuluyor…",
+      "submit": "Hesap oluştur",
+      "haveAccount": "Zaten bir hesabınız var mı?",
+      "loginInstead": "Giriş yapın",
+      "passwordsMismatch": "Şifreler eşleşmiyor.",
+      "emailTaken": "Bu e-posta ile zaten bir hesap var."
+    }
+  }
+}

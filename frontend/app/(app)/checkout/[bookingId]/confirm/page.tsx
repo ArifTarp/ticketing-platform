@@ -9,6 +9,7 @@ import type { BookingResponse } from "@/types/booking";
 import { EmptyState } from "@/components/common/EmptyState";
 import { BookingSuccessPanel } from "@/components/checkout/BookingSuccessPanel";
 import { BookingFailurePanel } from "@/components/checkout/BookingFailurePanel";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 
 interface ConfirmPageProps {
   params: Promise<{ bookingId: string }>;
@@ -17,6 +18,7 @@ interface ConfirmPageProps {
 export default function ConfirmPage({ params }: ConfirmPageProps) {
   const { bookingId } = use(params);
   const router = useRouter();
+  const { t } = useLocale();
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
 
   const [booking, setBooking] = useState<BookingResponse | null>(null);
@@ -43,7 +45,7 @@ export default function ConfirmPage({ params }: ConfirmPageProps) {
       })
       .catch((err) => {
         if (isCancelled) return;
-        setLoadError(err instanceof ApiRequestError ? err.detail : "Failed to load this booking.");
+        setLoadError(err instanceof ApiRequestError ? err.detail : t("confirm.couldntLoad"));
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -63,7 +65,9 @@ export default function ConfirmPage({ params }: ConfirmPageProps) {
   }
 
   if (loadError || !booking) {
-    return <EmptyState title="Couldn't load this booking" description={loadError ?? "Something went wrong."} />;
+    return (
+      <EmptyState title={t("confirm.couldntLoad")} description={loadError ?? t("common.somethingWentWrong")} />
+    );
   }
 
   if (booking.status === "PENDING") {

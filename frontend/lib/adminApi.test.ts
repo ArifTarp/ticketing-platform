@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createEvent, createSeatCategories, createVenue, fetchAdminEvents } from "./adminApi";
+import {
+  createEvent,
+  createSeatCategories,
+  createVenue,
+  deleteEvent,
+  fetchAdminEvents,
+  updateEvent,
+} from "./adminApi";
 
 describe("adminApi", () => {
   beforeEach(() => {
@@ -81,6 +88,52 @@ describe("adminApi", () => {
     expect(url).toBe("http://localhost:8080/api/v1/events/42/seat-categories");
     expect(init?.method).toBe("POST");
     expect(JSON.parse(init?.body as string)).toEqual([{ name: "VIP", price: 120, section: "A" }]);
+  });
+
+  it("updateEvent PUTs to /api/v1/events/{eventId}", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+
+    await updateEvent(42, {
+      title: "Rock Night (rescheduled)",
+      description: "",
+      startsAt: "2026-10-02T20:00:00Z",
+      status: "ON_SALE",
+      imageUrl: "https://example.com/poster.jpg",
+    });
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("http://localhost:8080/api/v1/events/42");
+    expect(init?.method).toBe("PUT");
+    expect(JSON.parse(init?.body as string)).toEqual({
+      title: "Rock Night (rescheduled)",
+      description: "",
+      startsAt: "2026-10-02T20:00:00Z",
+      status: "ON_SALE",
+      imageUrl: "https://example.com/poster.jpg",
+    });
+  });
+
+  it("deleteEvent DELETEs to /api/v1/events/{eventId}", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 204 }));
+
+    await deleteEvent(42);
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("http://localhost:8080/api/v1/events/42");
+    expect(init?.method).toBe("DELETE");
+  });
+
+  it("rejects deleteEvent with the parsed 404 problem+json when the event doesn't exist", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ status: 404, title: "Not Found", detail: "No such event" }), {
+        status: 404,
+        headers: { "Content-Type": "application/problem+json" },
+      }),
+    );
+
+    await expect(deleteEvent(999)).rejects.toMatchObject({ status: 404 });
   });
 
   it("rejects with the parsed 409 problem+json on a duplicate seat-category name/section", async () => {

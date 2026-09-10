@@ -16,6 +16,12 @@ const password = "TestPass123!";
 
 test.describe.configure({ mode: "serial" });
 
+// This spec's assertions match English UI copy; the app now defaults to "tr" (Turkish-market
+// demo, lib/i18n/LocaleContext.tsx) — force "en" for every navigation here.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("ticketing_locale", "en"));
+});
+
 test.beforeAll(() => {
   execSync(
     `docker exec ticketing-postgres psql -U ticketing -d ticketing_auth -c ` +

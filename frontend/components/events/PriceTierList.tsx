@@ -1,5 +1,6 @@
 import type { SeatCategoryDto } from "@/types/event";
 import { formatPrice } from "@/lib/formatPrice";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 
 interface PriceTierListProps {
   seatCategories: SeatCategoryDto[];
@@ -7,8 +8,10 @@ interface PriceTierListProps {
 
 /** One row per SeatCategory (name + price) — screen 3's price list. */
 export function PriceTierList({ seatCategories }: PriceTierListProps) {
+  const { t } = useLocale();
+
   if (seatCategories.length === 0) {
-    return <p className="text-sm text-[var(--text-secondary)]">Pricing not announced yet.</p>;
+    return <p className="text-sm text-[var(--text-secondary)]">{t("eventDetail.pricingUnannounced")}</p>;
   }
 
   return (

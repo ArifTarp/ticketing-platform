@@ -1,7 +1,7 @@
-/** Formats a decimal price as USD, e.g. 120 -> "$120.00". Demo-scope: single currency, no locale switch. */
+/** Formats a decimal price as Turkish lira, e.g. 120 -> "₺120,00". Turkish-market demo (root CLAUDE.md). */
 export function formatPrice(amount: number): string {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("tr-TR", {
     style: "currency",
-    currency: "USD",
+    currency: "TRY",
   }).format(amount);
 }

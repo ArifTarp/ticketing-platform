@@ -96,4 +96,59 @@ describe("useSeatSelection", () => {
 
     expect(result.current!.holdError).toBe("Seat 10 is already held");
   });
+
+  it("resumeBooking restores selectedSeats/booking from an already-PENDING booking (refresh-mid-hold bug fix)", () => {
+    const seats = [makeSeat(10, 120), makeSeat(11, 120), makeSeat(12, 250)];
+    const pendingBooking = {
+      id: 7,
+      userId: 1,
+      eventId: 1,
+      status: "PENDING" as const,
+      total: 240,
+      createdAt: "2026-01-01T00:00:00Z",
+      expiresAt: "2026-01-01T00:10:00Z",
+      items: [
+        { seatId: 10, price: 120 },
+        { seatId: 11, price: 120 },
+      ],
+    };
+
+    const { result } = renderHook(() => useSeatSelection({ eventId: 1, userId: 1 }));
+
+    act(() => {
+      result.current!.resumeBooking(pendingBooking, seats);
+    });
+
+    expect(result.current!.booking).toEqual(pendingBooking);
+    expect(result.current!.selectedSeatIds.has(10)).toBe(true);
+    expect(result.current!.selectedSeatIds.has(11)).toBe(true);
+    expect(result.current!.selectedSeatIds.has(12)).toBe(false);
+    expect(result.current!.total).toBe(240);
+  });
+
+  it("resumeBooking silently drops any booking item whose seatId isn't in the loaded seat map", () => {
+    const seats = [makeSeat(10, 120)];
+    const pendingBooking = {
+      id: 8,
+      userId: 1,
+      eventId: 1,
+      status: "PENDING" as const,
+      total: 220,
+      createdAt: "2026-01-01T00:00:00Z",
+      expiresAt: "2026-01-01T00:10:00Z",
+      items: [
+        { seatId: 10, price: 120 },
+        { seatId: 999, price: 100 },
+      ],
+    };
+
+    const { result } = renderHook(() => useSeatSelection({ eventId: 1, userId: 1 }));
+
+    act(() => {
+      result.current!.resumeBooking(pendingBooking, seats);
+    });
+
+    expect(result.current!.selectedSeats).toHaveLength(1);
+    expect(result.current!.selectedSeatIds.has(10)).toBe(true);
+  });
 });

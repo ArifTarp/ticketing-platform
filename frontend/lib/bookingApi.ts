@@ -45,6 +45,25 @@ export function fetchMyBookings(userId: string | number, status?: BookingStatus)
 }
 
 /**
+ * GET /api/v1/bookings?userId=&eventId=&status=PENDING — the seat-selection screen's "resume my
+ * in-progress hold on page refresh" query (services/booking/CLAUDE.md's append-not-duplicate
+ * invariant guarantees at most one `(userId, eventId, PENDING)` booking, so this always resolves
+ * to at most one result). Returns null when there's no in-progress hold to resume.
+ */
+export async function fetchPendingBooking(
+  userId: string | number,
+  eventId: string | number,
+): Promise<BookingResponse | null> {
+  const search = new URLSearchParams({
+    userId: String(userId),
+    eventId: String(eventId),
+    status: "PENDING" satisfies BookingStatus,
+  });
+  const results = await apiFetch<BookingResponse[]>(`/api/v1/bookings?${search.toString()}`);
+  return results[0] ?? null;
+}
+
+/**
  * GET /api/v1/bookings/availability?eventId= — live per-seat status for one event. Merge
  * client-side with fetchEventSeats() by seatId (business-rules.md's "Seat map contract"); a
  * seatId absent from this list is implicitly AVAILABLE.

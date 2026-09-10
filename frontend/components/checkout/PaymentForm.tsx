@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { FormError } from "@/components/common/FormError";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 
 interface PaymentFormProps {
   isDisabled: boolean;
@@ -21,6 +22,7 @@ const CVC_PATTERN = /^\d{3,4}$/;
  * knowledge of the backend call, it only confirms user intent.
  */
 export function PaymentForm({ isDisabled, onPay }: PaymentFormProps) {
+  const { t } = useLocale();
   const [cardNumber, setCardNumber] = useState("");
   const [expiry, setExpiry] = useState("");
   const [cvc, setCvc] = useState("");
@@ -29,15 +31,15 @@ export function PaymentForm({ isDisabled, onPay }: PaymentFormProps) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!CARD_NUMBER_PATTERN.test(cardNumber.replace(/\s/g, ""))) {
-      setError("Enter a valid 16-digit card number.");
+      setError(t("checkout.cardNumberInvalid"));
       return;
     }
     if (!EXPIRY_PATTERN.test(expiry)) {
-      setError("Enter expiry as MM/YY.");
+      setError(t("checkout.expiryInvalid"));
       return;
     }
     if (!CVC_PATTERN.test(cvc)) {
-      setError("Enter a valid CVC.");
+      setError(t("checkout.cvcInvalid"));
       return;
     }
     setError(null);
@@ -50,11 +52,11 @@ export function PaymentForm({ isDisabled, onPay }: PaymentFormProps) {
         <span className="value-mono flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] text-xs text-[var(--accent)]">
           2
         </span>
-        <h2 className="label-mono">Payment details</h2>
+        <h2 className="label-mono">{t("checkout.paymentDetails")}</h2>
       </div>
       <FormError message={error} />
       <label className="flex flex-col gap-1.5 text-sm text-[var(--text-secondary)]">
-        Card number
+        {t("checkout.cardNumber")}
         <input
           type="text"
           inputMode="numeric"
@@ -67,7 +69,7 @@ export function PaymentForm({ isDisabled, onPay }: PaymentFormProps) {
       </label>
       <div className="flex gap-3">
         <label className="flex flex-1 flex-col gap-1.5 text-sm text-[var(--text-secondary)]">
-          Expiry
+          {t("checkout.expiry")}
           <input
             type="text"
             placeholder="MM/YY"
@@ -78,7 +80,7 @@ export function PaymentForm({ isDisabled, onPay }: PaymentFormProps) {
           />
         </label>
         <label className="flex flex-1 flex-col gap-1.5 text-sm text-[var(--text-secondary)]">
-          CVC
+          {t("checkout.cvc")}
           <input
             type="text"
             inputMode="numeric"
@@ -91,7 +93,7 @@ export function PaymentForm({ isDisabled, onPay }: PaymentFormProps) {
         </label>
       </div>
       <button type="submit" disabled={isDisabled} className="btn btn-primary w-full">
-        Pay now
+        {t("checkout.payNow")}
       </button>
     </form>
   );

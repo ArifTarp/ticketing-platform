@@ -4,7 +4,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { fetchEventSeats } from "@/lib/eventApi";
-import { fetchSeatAvailability, checkout } from "@/lib/bookingApi";
+import { fetchSeatAvailability, fetchPendingBooking, checkout } from "@/lib/bookingApi";
 import { ApiRequestError } from "@/lib/apiClient";
 import { useAuth } from "@/context/SessionProvider";
 import { useSeatSelection } from "@/hooks/useSeatSelection";
@@ -20,6 +20,7 @@ import { SeatMapLegend } from "@/components/seats/SeatMapLegend";
 import { SelectionSummary } from "@/components/seats/SelectionSummary";
 import { RaceConflictToast } from "@/components/seats/RaceConflictToast";
 import { HoldExpiredModal } from "@/components/seats/HoldExpiredModal";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 
 interface SeatSelectionPageProps {
   params: Promise<{ eventId: string }>;
@@ -28,6 +29,7 @@ interface SeatSelectionPageProps {
 export default function SeatSelectionPage({ params }: SeatSelectionPageProps) {
   const { eventId } = use(params);
   const router = useRouter();
+  const { t } = useLocale();
   const { isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
 
   const [seatMap, setSeatMap] = useState<SeatMapResponse | null>(null);
@@ -66,12 +68,25 @@ export default function SeatSelectionPage({ params }: SeatSelectionPageProps) {
         if (isCancelled) return;
         setSeatMap(layout);
         setAvailability(availabilityRows);
+
+        // Bug fix: resume an already-PENDING hold (e.g. this same user refreshed mid-hold)
+        // instead of starting from an empty selection — otherwise the seat map shows their own
+        // seats as HELD (red, unclickable) with no way back to the countdown/checkout UI they
+        // already had. Best-effort: a failure here just leaves the page in its normal empty-
+        // selection state, same as before this fix.
+        if (userId) {
+          fetchPendingBooking(userId, eventId)
+            .then((pendingBooking) => {
+              if (!isCancelled && pendingBooking) {
+                selection.resumeBooking(pendingBooking, layout.seats);
+              }
+            })
+            .catch(() => undefined);
+        }
       })
       .catch((err) => {
         if (isCancelled) return;
-        setLoadError(
-          err instanceof ApiRequestError ? err.detail : "Failed to load the seat map.",
-        );
+        setLoadError(err instanceof ApiRequestError ? err.detail : t("seats.couldntLoad"));
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -80,7 +95,8 @@ export default function SeatSelectionPage({ params }: SeatSelectionPageProps) {
     return () => {
       isCancelled = true;
     };
-  }, [eventId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, userId, selection.resumeBooking]);
 
   // Screen-4 rule: countdown hits 00:00 before checkout -> blocking modal, refetch availability,
   // clear the (now-expired) selection/booking.
@@ -99,7 +115,7 @@ export default function SeatSelectionPage({ params }: SeatSelectionPageProps) {
       await selection.holdSelectedSeats();
     } catch (err) {
       if (err instanceof ApiRequestError && err.status === 409) {
-        setRaceConflictMessage(`${err.detail} Please choose a different seat.`);
+        setRaceConflictMessage(`${err.detail} ${t("seats.raceConflictSuffix")}`);
         await loadAvailability().catch(() => undefined);
       }
     }
@@ -122,7 +138,7 @@ export default function SeatSelectionPage({ params }: SeatSelectionPageProps) {
       router.push(`/checkout/${selection.booking.id}`);
     } catch (err) {
       setCheckoutError(
-        err instanceof ApiRequestError ? err.detail : "Failed to start checkout.",
+        err instanceof ApiRequestError ? err.detail : t("seats.failedToStartCheckout"),
       );
     } finally {
       setIsCheckingOut(false);
@@ -145,11 +161,11 @@ export default function SeatSelectionPage({ params }: SeatSelectionPageProps) {
   if (loadError || !seatMap) {
     return (
       <EmptyState
-        title="Couldn't load the seat map"
-        description={loadError ?? "Something went wrong."}
+        title={t("seats.couldntLoad")}
+        description={loadError ?? t("common.somethingWentWrong")}
         action={
           <Link href={`/events/${eventId}`} className="btn btn-primary">
-            Back to event
+            {t("seats.backToEvent")}
           </Link>
         }
       />
@@ -162,7 +178,7 @@ export default function SeatSelectionPage({ params }: SeatSelectionPageProps) {
     <div className="flex flex-col gap-6 pb-4">
       <div className="flex items-center justify-between">
         <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold text-[var(--text-primary)]">
-          Select your seats
+          {t("seats.pageTitle")}
         </h1>
         <CountdownTimer expiresAt={selection.booking?.expiresAt ?? null} />
       </div>

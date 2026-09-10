@@ -13,6 +13,7 @@ import { FormError } from "@/components/common/FormError";
 import { BookingSummary } from "@/components/checkout/BookingSummary";
 import { PaymentForm } from "@/components/checkout/PaymentForm";
 import { PaymentProcessingOverlay } from "@/components/checkout/PaymentProcessingOverlay";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 
 interface CheckoutPageProps {
   params: Promise<{ bookingId: string }>;
@@ -21,6 +22,7 @@ interface CheckoutPageProps {
 export default function CheckoutPage({ params }: CheckoutPageProps) {
   const { bookingId } = use(params);
   const router = useRouter();
+  const { t } = useLocale();
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
 
   const [booking, setBooking] = useState<BookingResponse | null>(null);
@@ -54,7 +56,7 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
         }
       } catch (err) {
         setPayError(
-          err instanceof ApiRequestError ? err.detail : "Failed to start checkout.",
+          err instanceof ApiRequestError ? err.detail : t("checkout.failedToStartCheckout"),
         );
         return;
       }
@@ -89,7 +91,7 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
         if (isCancelled) return;
         setLoadError({
           status: err instanceof ApiRequestError ? err.status : 0,
-          message: err instanceof ApiRequestError ? err.detail : "Failed to load this booking.",
+          message: err instanceof ApiRequestError ? err.detail : t("checkout.couldntLoad"),
         });
       })
       .finally(() => {
@@ -124,8 +126,8 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
   if (loadError || !booking) {
     return (
       <EmptyState
-        title={loadError?.status === 404 ? "Booking not found" : "Couldn't load this booking"}
-        description={loadError?.message ?? "Something went wrong."}
+        title={loadError?.status === 404 ? t("checkout.bookingNotFound") : t("checkout.couldntLoad")}
+        description={loadError?.message ?? t("common.somethingWentWrong")}
       />
     );
   }
@@ -137,7 +139,7 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
           1
         </span>
         <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold text-[var(--text-primary)]">
-          Checkout
+          {t("checkout.title")}
         </h1>
       </div>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_1fr]">
@@ -149,9 +151,7 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
         <BookingSummary booking={polling.booking ?? booking} />
       </div>
       {payError && <FormError message={payError} />}
-      {polling.hasTimedOut && (
-        <FormError message="This is taking longer than expected. Refresh the page to check the latest status." />
-      )}
+      {polling.hasTimedOut && <FormError message={t("checkout.takingLonger")} />}
       {polling.error && <FormError message={polling.error} />}
     </div>
   );

@@ -1,5 +1,6 @@
 import type { SeatDto } from "@/types/event";
 import { formatPrice } from "@/lib/formatPrice";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 import { FormError } from "@/components/common/FormError";
 
 interface SelectionSummaryProps {
@@ -27,13 +28,15 @@ export function SelectionSummary({
   onHoldSelectedSeats,
   onProceedToPayment,
 }: SelectionSummaryProps) {
+  const { t } = useLocale();
+
   return (
     <div className="panel sticky top-4 flex h-fit flex-col gap-4 p-4">
       <h2 className="font-[family-name:var(--font-display)] text-sm font-semibold text-[var(--text-primary)]">
-        Your selection
+        {t("seats.summary.title")}
       </h2>
       {selectedSeats.length === 0 ? (
-        <p className="text-sm text-[var(--text-secondary)]">Click a seat to select it (up to 6).</p>
+        <p className="text-sm text-[var(--text-secondary)]">{t("seats.summary.prompt")}</p>
       ) : (
         <ul className="flex flex-col gap-1.5 text-sm">
           {selectedSeats.map((seat) => (
@@ -51,11 +54,11 @@ export function SelectionSummary({
       )}
       {maxSeatsReached && (
         <p className="label-mono" style={{ color: "var(--status-pending)" }}>
-          Max 6 seats per booking.
+          {t("seats.summary.maxReached")}
         </p>
       )}
       <div className="flex items-center justify-between border-t border-[var(--border)] pt-3 text-sm font-semibold text-[var(--text-primary)]">
-        <span>Total</span>
+        <span>{t("seats.summary.total")}</span>
         <span className="value-mono">{formatPrice(total)}</span>
       </div>
       <FormError message={holdError} />
@@ -66,7 +69,7 @@ export function SelectionSummary({
           disabled={isCheckingOut}
           className="btn btn-primary w-full"
         >
-          {isCheckingOut ? "Proceeding…" : "Proceed to payment"}
+          {isCheckingOut ? t("seats.summary.proceeding") : t("seats.summary.proceedToPayment")}
         </button>
       ) : (
         <button
@@ -75,7 +78,7 @@ export function SelectionSummary({
           disabled={selectedSeats.length === 0 || isHolding}
           className="btn btn-primary w-full"
         >
-          {isHolding ? "Holding…" : "Hold selected seats"}
+          {isHolding ? t("seats.summary.holding") : t("seats.summary.holdSelected")}
         </button>
       )}
     </div>

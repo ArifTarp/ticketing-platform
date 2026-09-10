@@ -8,11 +8,13 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { EventCard } from "./EventCard";
 import { EventCardSkeleton } from "./EventCardSkeleton";
 import { EventFilterBar } from "./EventFilterBar";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 
 const SKELETON_COUNT = 6;
 
 /** Grid/list container for screen 2 — owns the fetch and its loading/empty/error/loaded states. */
 export function EventList() {
+  const { t } = useLocale();
   const [filters, setFilters] = useState<EventFilterParams>({});
   const [events, setEvents] = useState<EventSummaryResponse[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,10 +29,11 @@ export function EventList() {
       setEvents(result);
     } catch (err) {
       setEvents(null);
-      setError(err instanceof ApiRequestError ? err.detail : "Failed to load events.");
+      setError(err instanceof ApiRequestError ? err.detail : t("common.somethingWentWrong"));
     } finally {
       setIsLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -51,7 +54,7 @@ export function EventList() {
 
       {!isLoading && error && (
         <EmptyState
-          title="Couldn't load events"
+          title={t("events.couldntLoad")}
           description={error}
           action={
             <button
@@ -59,14 +62,14 @@ export function EventList() {
               onClick={() => setReloadToken((prev) => prev + 1)}
               className="btn btn-primary"
             >
-              Retry
+              {t("common.retry")}
             </button>
           }
         />
       )}
 
       {!isLoading && !error && events && events.length === 0 && (
-        <EmptyState title="No events found" description="Try different filters." />
+        <EmptyState title={t("events.noneFound")} description={t("events.tryDifferentFilters")} />
       )}
 
       {!isLoading && !error && events && events.length > 0 && (

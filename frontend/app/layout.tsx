@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, Inter, Geist_Mono } from "next/font/google";
 import { SessionProvider } from "@/context/SessionProvider";
+import { LocaleProvider } from "@/lib/i18n/LocaleContext";
 import "./globals.css";
 
 /**
@@ -37,7 +38,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${displayFont.variable} ${bodyFont.variable} ${dataFont.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <SessionProvider>{children}</SessionProvider>
+        <LocaleProvider>
+          <SessionProvider>{children}</SessionProvider>
+        </LocaleProvider>
       </body>
     </html>
   );

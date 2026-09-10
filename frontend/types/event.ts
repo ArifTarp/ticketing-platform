@@ -10,6 +10,9 @@ export interface EventSummaryResponse {
   startsAt: string;
   status: EventStatus;
   fromPrice: number | null;
+  /** Landing from a parallel event-service change; null/undefined for events seeded before the
+   *  migration backfill — callers must render a fallback rather than assume it's always present. */
+  imageUrl?: string | null;
 }
 
 /** Mirrors services/event's VenueDto. */
@@ -41,6 +44,7 @@ export interface EventResponse {
   bookable: boolean;
   venue: VenueDto;
   seatCategories: SeatCategoryDto[];
+  imageUrl?: string | null;
 }
 
 /**
@@ -87,6 +91,19 @@ export interface CreateEventRequest {
   description: string;
   startsAt: string;
   status?: EventStatus;
+}
+
+/**
+ * PUT /api/v1/events/{eventId} body — mirrors services/event's UpdateEventRequest (Phase 14,
+ * admin-only). Same shape as CreateEventRequest minus `venueId` (the venue isn't editable),
+ * plus `imageUrl`.
+ */
+export interface UpdateEventRequest {
+  title: string;
+  description: string;
+  startsAt: string;
+  status: EventStatus;
+  imageUrl: string | null;
 }
 
 /**

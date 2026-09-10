@@ -23,6 +23,11 @@ export interface UseSeatSelectionResult {
   toggleSeat: (seat: SeatDto) => void;
   clearSelection: () => void;
   holdSelectedSeats: () => Promise<BookingResponse>;
+  /** Resumes an already-PENDING booking found on mount (e.g. after a page refresh) — see
+   *  `fetchPendingBooking`. Reconstructs `selectedSeats` from the booking's items by looking each
+   *  `seatId` up in the already-loaded seat map layout, since `BookingItemDto` only carries
+   *  `seatId`/`price`, not the full `SeatDto`. */
+  resumeBooking: (resumedBooking: BookingResponse, seats: SeatDto[]) => void;
 }
 
 /**
@@ -92,6 +97,16 @@ export function useSeatSelection({ eventId, userId }: UseSeatSelectionOptions): 
     }
   }, [selectedSeats, eventId, userId]);
 
+  const resumeBooking = useCallback((resumedBooking: BookingResponse, seats: SeatDto[]) => {
+    const seatById = new Map(seats.map((seat) => [seat.seatId, seat]));
+    const resumedSeats = resumedBooking.items
+      .map((item) => seatById.get(item.seatId))
+      .filter((seat): seat is SeatDto => Boolean(seat));
+    setSelectedSeats(resumedSeats);
+    setBooking(resumedBooking);
+    setHoldError(null);
+  }, []);
+
   const total = useMemo(
     () => selectedSeats.reduce((sum, seat) => sum + seat.seatCategory.price, 0),
     [selectedSeats],
@@ -108,5 +123,6 @@ export function useSeatSelection({ eventId, userId }: UseSeatSelectionOptions): 
     toggleSeat,
     clearSelection,
     holdSelectedSeats,
+    resumeBooking,
   };
 }

@@ -2,25 +2,26 @@
 
 import { useRouter } from "next/navigation";
 import type { EventResponse } from "@/types/event";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 
 interface SelectSeatsButtonProps {
   event: EventResponse;
 }
 
-function disabledReason(event: EventResponse): string | null {
+function disabledReasonKey(event: EventResponse): string | null {
   if (event.bookable) {
     return null;
   }
   if (event.status === "SOLD_OUT") {
-    return "This event is sold out.";
+    return "eventDetail.reason.soldOut";
   }
   if (event.status === "CLOSED") {
-    return "Ticket sales are closed for this event.";
+    return "eventDetail.reason.closed";
   }
   if (new Date(event.startsAt).getTime() <= Date.now()) {
-    return "This event has already started.";
+    return "eventDetail.reason.started";
   }
-  return "This event is not on sale yet.";
+  return "eventDetail.reason.notOnSale";
 }
 
 /**
@@ -30,7 +31,8 @@ function disabledReason(event: EventResponse): string | null {
  */
 export function SelectSeatsButton({ event }: SelectSeatsButtonProps) {
   const router = useRouter();
-  const reason = disabledReason(event);
+  const { t } = useLocale();
+  const reasonKey = disabledReasonKey(event);
 
   return (
     <div className="flex flex-col gap-1">
@@ -40,9 +42,9 @@ export function SelectSeatsButton({ event }: SelectSeatsButtonProps) {
         onClick={() => router.push(`/events/${event.id}/seats`)}
         className="btn btn-primary w-full"
       >
-        Select seats
+        {t("eventDetail.selectSeats")}
       </button>
-      {reason && <p className="label-mono">{reason}</p>}
+      {reasonKey && <p className="label-mono">{t(reasonKey)}</p>}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { BookingResponse } from "@/types/booking";
 import { formatPrice } from "@/lib/formatPrice";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 
 interface BookingSuccessPanelProps {
   booking: BookingResponse;
@@ -8,6 +9,8 @@ interface BookingSuccessPanelProps {
 
 /** Success view for a CONFIRMED booking — screen 6. */
 export function BookingSuccessPanel({ booking }: BookingSuccessPanelProps) {
+  const { t } = useLocale();
+
   return (
     <div
       className="panel booking-success-scale-in flex flex-col items-center gap-4 px-6 py-10 text-center"
@@ -32,23 +35,23 @@ export function BookingSuccessPanel({ booking }: BookingSuccessPanelProps) {
         className="label-mono rounded-full px-2.5 py-1"
         style={{ color: "var(--status-live)", backgroundColor: "var(--status-live-soft)" }}
       >
-        Confirmed
+        {t("confirm.confirmedBadge")}
       </span>
       <h1 className="font-[family-name:var(--font-display)] text-lg font-semibold text-[var(--text-primary)]">
-        Booking confirmed
+        {t("confirm.bookingConfirmed")}
       </h1>
       <ul className="flex flex-col gap-1 text-sm">
         {booking.items.map((item) => (
           <li key={item.seatId} className="value-mono text-[var(--text-secondary)]">
-            Seat #{item.seatId}
+            {t("checkout.seat", { id: item.seatId })}
           </li>
         ))}
       </ul>
       <p className="value-mono text-sm font-medium text-[var(--text-primary)]">
-        Total: {formatPrice(booking.total)}
+        {t("confirm.totalLabel", { price: formatPrice(booking.total) })}
       </p>
       <Link href="/tickets" className="btn btn-primary">
-        View my tickets
+        {t("confirm.viewMyTickets")}
       </Link>
     </div>
   );

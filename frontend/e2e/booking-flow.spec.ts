@@ -5,15 +5,24 @@ import { test, expect } from "@playwright/test";
  * this is what actually proves the UI redesign didn't break functionality: register -> browse ->
  * pick an event -> hold seats -> pay (mock) -> confirmed booking -> ticket appears in /tickets.
  *
- * Uses event #2 ("Acoustic Evening", $80/seat General admission) deliberately: 2 seats = $160,
+ * Uses event #2 ("Acoustic Evening", ₺80/seat General admission) deliberately: 2 seats = ₺160,
  * comfortably under the payment mock's fail-at->=$500 threshold (services/payment's
- * PaymentMockRule), so the payment outcome is deterministic here.
+ * PaymentMockRule, still USD-denominated server-side), so the payment outcome is deterministic
+ * here.
+ *
+ * Forces the "en" i18n locale (lib/i18n/LocaleContext.tsx) before every navigation, since this
+ * spec's assertions match English UI copy — the app itself defaults to "tr" (Turkish-market demo,
+ * root CLAUDE.md).
  */
 
 test.describe.configure({ mode: "serial" });
 
 const uniqueEmail = `e2e-${Date.now()}@example.com`;
 const password = "TestPass123!";
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("ticketing_locale", "en"));
+});
 
 test("register, hold seats, pay, and see the confirmed ticket", async ({ page }) => {
   // 1. Register — auto-logs in and redirects to /events.
@@ -39,7 +48,9 @@ test("register, hold seats, pay, and see the confirmed ticket", async ({ page })
   await expect(availableSeats.first()).toBeVisible({ timeout: 10_000 });
   await availableSeats.nth(0).click();
   await availableSeats.nth(1).click();
-  await expect(page.getByText("$160.00")).toBeVisible();
+  // formatPrice.ts is TRY-denominated (tr-TR/Intl) regardless of the current i18n locale — see
+  // lib/formatPrice.ts's own doc comment for why this isn't itself locale-switched.
+  await expect(page.getByText(/160[.,]00/)).toBeVisible();
   await page.getByRole("button", { name: /hold selected seats/i }).click();
   await expect(page.getByRole("button", { name: /proceed to payment/i })).toBeVisible({
     timeout: 10_000,

@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { EventHeader } from "@/components/events/EventHeader";
 import { PriceTierList } from "@/components/events/PriceTierList";
 import { SelectSeatsButton } from "@/components/events/SelectSeatsButton";
+import { useLocale } from "@/lib/i18n/LocaleContext";
 
 interface EventDetailPageProps {
   params: Promise<{ eventId: string }>;
@@ -16,6 +17,7 @@ interface EventDetailPageProps {
 
 export default function EventDetailPage({ params }: EventDetailPageProps) {
   const { eventId } = use(params);
+  const { t } = useLocale();
   const [event, setEvent] = useState<EventResponse | null>(null);
   const [error, setError] = useState<{ status: number; message: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,18 +68,21 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
     if (error?.status === 404) {
       return (
         <EmptyState
-          title="Event not found"
-          description="The event you're looking for doesn't exist or was removed."
+          title={t("eventDetail.notFoundTitle")}
+          description={t("eventDetail.notFoundDescription")}
           action={
             <Link href="/events" className="btn btn-primary">
-              Back to events
+              {t("eventDetail.backToEvents")}
             </Link>
           }
         />
       );
     }
     return (
-      <EmptyState title="Couldn't load this event" description={error?.message ?? "Something went wrong."} />
+      <EmptyState
+        title={t("eventDetail.couldntLoad")}
+        description={error?.message ?? t("common.somethingWentWrong")}
+      />
     );
   }
 

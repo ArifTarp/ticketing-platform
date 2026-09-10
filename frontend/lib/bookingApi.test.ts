@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { checkout, fetchMyBookings, fetchSeatAvailability, getBooking, holdSeats } from "./bookingApi";
+import {
+  checkout,
+  fetchMyBookings,
+  fetchPendingBooking,
+  fetchSeatAvailability,
+  getBooking,
+  holdSeats,
+} from "./bookingApi";
 
 describe("bookingApi", () => {
   beforeEach(() => {
@@ -56,6 +63,38 @@ describe("bookingApi", () => {
 
     const [url] = vi.mocked(fetch).mock.calls[0];
     expect(url).toBe("http://localhost:8080/api/v1/bookings?userId=7&status=CONFIRMED");
+  });
+
+  it("fetchPendingBooking queries userId+eventId+status=PENDING and returns the first result", async () => {
+    const booking = {
+      id: 5,
+      userId: 7,
+      eventId: 9,
+      status: "PENDING",
+      total: 120,
+      createdAt: "2026-01-01T00:00:00Z",
+      expiresAt: "2026-01-01T00:10:00Z",
+      items: [{ seatId: 1, price: 120 }],
+    };
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify([booking]), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+
+    const result = await fetchPendingBooking(7, 9);
+
+    const [url] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("http://localhost:8080/api/v1/bookings?userId=7&eventId=9&status=PENDING");
+    expect(result).toEqual(booking);
+  });
+
+  it("fetchPendingBooking returns null when there's no in-progress hold", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+
+    const result = await fetchPendingBooking(7, 9);
+
+    expect(result).toBeNull();
   });
 
   it("fetchSeatAvailability calls GET /api/v1/bookings/availability?eventId=", async () => {
